@@ -1,6 +1,6 @@
 ﻿# BRR Suite
 
-This is a C# library for converting modern, uncompressed audio files to the bit-rate reduction format (BRR) used by the Super Nintendo Entertainment System. For a user-friendly GUI employing this library, see my [BRR Suite GUI repository](https://github.com/spannerisms/BRRSuiteGUI)
+This is a C# library for converting modern, uncompressed audio files to the bit-rate reduction format (BRR) used by the Super Nintendo Entertainment System. For a user-friendly GUI employing this library, see my [BRR Suite GUI repository](https://github.com/spannerisms/BRRSuiteGUI).
 
 # Acknowledgements
   * kan/spannerisms - me, the library author

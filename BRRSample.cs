@@ -29,7 +29,7 @@ public class BRRSample {
 			// sanitize to ascii
 			value = string.Concat(value.Where(c => char.IsAscii(c) && !char.IsControl(c)));
 
-			// encforce length
+			// enforce length
 			_name = value.Length switch {
 				SuiteSample.InstrumentNameLength => value,
 				< SuiteSample.InstrumentNameLength => value.PadRight(SuiteSample.InstrumentNameLength, SuiteSample.InstrumentNamePadChar),
@@ -400,7 +400,6 @@ public class BRRSample {
 				return false;
 		}
 
-
 		if ((data[^BrrBlockSize] & EndFlag) is 0) {
 			message = $"The sample data does not contain an end flag on the final block header.";
 			return false;
@@ -436,7 +435,6 @@ public class BRRSample {
 		}
 
 	}
-
 
 	/// <summary>
 	/// Exports this sample's data to a BRR Suite Sample file.

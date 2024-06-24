@@ -312,7 +312,7 @@ public static class Conversion {
 
 				samples = filt(samples);
 
-				if (samples.Length != samplesLength) {
+				if (samples.Length != targetLength) {
 					throw new BRRConversionException("Something is wrong with a filter that changed the size of the sample data.");
 				}
 			});

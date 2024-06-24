@@ -7,3 +7,5 @@ obj/*
 */.vs/*
 *.user
 */Setup/*
+publish.bat
+nuget.config
