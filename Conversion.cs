@@ -79,7 +79,7 @@ public static class Conversion {
 	/// <param name="v"></param>
 	/// <returns>A new 15-bit value.</returns>
 	public static int Clip(int v) => v switch {
-		>  0x7FFF    => v - 2,      // equivalent to (p + 0x7FFF) & 0x7FFF
+		>  0x7FFF    => (v + 0x7FFF) & 0x7FFF,
 		< -0x8000    => 0,          // clipped to 0
 		>  0x3FFF    => v - 0x8000, // [4000,7FFF] => [-4000,-1]
 		< -0x4000    => v + 0x8000, // [-8000,-4001] => [0,-3FFF]

@@ -3,11 +3,11 @@
 /// <summary>
 /// Represents an audio sample rate given in hertz.
 /// </summary>
-public sealed class SampleRate : IComparable<SampleRate> {
+public readonly struct SampleRate : IComparable<SampleRate> {
 	/// <summary>
 	/// Gets the number of samples per second expressed by this frequency.
 	/// </summary>
-	public int Frequency { get; }
+	public readonly int Frequency { get; }
 
 	/// <summary>
 	/// Gets the frequency expressed as and rounded to the nearest kilohertz.
@@ -20,11 +20,6 @@ public sealed class SampleRate : IComparable<SampleRate> {
 	public decimal Cram => 32000M / Frequency;
 
 	/// <summary>
-	/// Gets the value of this frequency with units (Hz).
-	/// </summary>
-	public string Name { get; }
-
-	/// <summary>
 	/// Creates a new instance of the <see cref="SampleRate"/> class with the specified frequency.
 	/// </summary>
 	/// <param name="frequency">The frequency of this sample. This value should be a positive, nonzero value.</param>
@@ -34,12 +29,11 @@ public sealed class SampleRate : IComparable<SampleRate> {
 			throw new ArgumentException("Frequency should be a positive, non-zero value.");
 		}
 
-		Name = $"{frequency} Hz";
 		Frequency = frequency;
 	}
 
 	/// <inheritdoc cref="object.ToString()"/>
-	public override string ToString() => Name;
+	public override string ToString() => $"{Frequency} Hz";
 
 	/// <summary>
 	/// Calculates the ratio representing this sample rate resampled to the given target frequency.
@@ -57,10 +51,7 @@ public sealed class SampleRate : IComparable<SampleRate> {
 
 	/// <inheritdoc cref="IComparable.CompareTo(object?)"/>
 	/// <exception cref="ArgumentNullException">If <paramref name="other"/> is <see langword="null"/>.</exception>
-	public int CompareTo(SampleRate? other) {
-		if (other is null) {
-			throw new ArgumentNullException(nameof(other), "Comparator argument was null.");
-		}
+	public int CompareTo(SampleRate other) {
 		return Frequency.CompareTo(other.Frequency);
 	}
 
@@ -88,4 +79,12 @@ public sealed class SampleRate : IComparable<SampleRate> {
 	/// Represents a sample rate of 44100 Hz, the standard for CD-quality audio.
 	/// </summary>
 	public static readonly SampleRate SR44100 = new(44100);
+
+
+
+#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
+	public static explicit operator SampleRate(int sr) => new(sr);
+
+	public static implicit operator int(SampleRate sr) => sr.Frequency;
+#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
 }
