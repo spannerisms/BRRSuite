@@ -21,9 +21,14 @@ public static class Constants {
 	public const int PcmBlockSize = 16;
 
 	/// <summary>
-	/// The preferred fidelity of a PCM file when converting to BRR.
+	/// The preferred bit-depth of a PCM file when converting to BRR.
 	/// </summary>
 	public const int PreferredBitsPerSample = 16;
+
+	/// <summary>
+	/// The default frequency when nothing is specified.
+	/// </summary>
+	internal const int DefaultFrequency = 32000;
 
 	//*****************************************************************************
 	// BRR block header

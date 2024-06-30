@@ -44,6 +44,13 @@ public static class Conversion {
 	// formula from fullsnes.txt
 	private static int PredictionFilter3(int p1, int p2) => p1 * 2 + ((p1 * -13) >> 6) - p2 + ((p2 * 3) >> 4);
 
+	// pre-init these for faster return
+	private static readonly PredictionFilter pf0 = PredictionFilter0;
+	private static readonly PredictionFilter pf1 = PredictionFilter1;
+	private static readonly PredictionFilter pf2 = PredictionFilter2;
+	private static readonly PredictionFilter pf3 = PredictionFilter3;
+
+
 	/// <summary>
 	/// Gets a delegate encapsulating a filter.
 	/// </summary>
@@ -51,10 +58,10 @@ public static class Conversion {
 	/// <returns>A <see cref="PredictionFilter"/> delegate for the filter.</returns>
 	/// <exception cref="ArgumentOutOfRangeException">The input value cannot be interpreted as a filter</exception>
 	public static PredictionFilter GetPredictionFilter(int filter) => filter switch {
-		0x00 => PredictionFilter0,
-		0x01 => PredictionFilter1,
-		0x02 => PredictionFilter2,
-		0x03 => PredictionFilter3,
+		0x00 => pf0,
+		0x01 => pf1,
+		0x02 => pf2,
+		0x03 => pf3,
 
 		_ => throw new ArgumentOutOfRangeException($"Not a valid filter: 0x{filter:X2}", nameof(filter))
 	};
@@ -582,23 +589,21 @@ public static class Conversion {
 			return brrOut;
 		};
 
+	/// <inheritdoc cref="Decode(byte[], int, int, decimal, int, bool)"/>
+	public static WaveContainer Decode(BRRSample brrSample, int sampleRate = -1, decimal minimumLength = 0.0M,
+		int loopCount = 1, bool applyGaussian = false) {
 
-
-
-
-
-
-
-
-
-
-
-
-
-	//	public static byte[] EncodeBlock(int samples, int offset, int filter, int )
+		return Decode(brrSample.Data,
+			loopBlock: brrSample.LoopBlock,
+			sampleRate: sampleRate < 1 ? brrSample.EncodingFrequency : sampleRate,
+			minimumLength: minimumLength,
+			loopCount: loopCount,
+			applyGaussian: applyGaussian
+		);
+	}
 
 	/// <summary>
-	/// Decodes a given stream of raw BRR data into a Wave Sound audio file.
+	/// Decodes a given stream of BRR data into a Wave Sound audio file.
 	/// </summary>
 	/// <param name="brrSample">The BRR data to decode. This should not include any loop header.</param>
 	/// <param name="loopBlock">The loop point of this sample in blocks, or -1 if the sample does not loop.</param>
@@ -608,7 +613,7 @@ public static class Conversion {
 	/// <param name="applyGaussian">Allows application of a filter to the final audio to simulate the SNES Gaussian filtering.</param>
 	/// <returns>A new <see cref="WaveContainer"/> object containing the decoded audio.</returns>
 	/// <exception cref="BRRConversionException"></exception>
-	public static WaveContainer Decode(byte[] brrSample, int loopBlock = NoLoop, int sampleRate = 32000,
+	public static WaveContainer Decode(byte[] brrSample, int loopBlock = NoLoop, int sampleRate = DefaultFrequency,
 		decimal minimumLength = 0.0M, int loopCount = 1, bool applyGaussian = false) {
 
 		const int GaussA = 372;

@@ -3,7 +3,7 @@
 /// <summary>
 /// Contains sample data and metadata about a Bit Rate Reduction sample.
 /// </summary>
-public class BRRSample {
+public sealed class BRRSample {
 	/// <summary>
 	/// The preferred file extension for a raw BRR sample.
 	/// </summary>
@@ -81,18 +81,33 @@ public class BRRSample {
 
 	/// <summary>
 	/// Gets or sets the target frequency this sample was encoded at. Defaults to 32000.
+	/// This value should not be zero or negative.
 	/// </summary>
-	public int EncodingFrequency { get; set; } = 32000;
+	public int EncodingFrequency {
+		get => _encodingFrequency;
+		set {
+			if (value < 1) {
+				throw new ArgumentOutOfRangeException(null, "Encoding frequency cannot be zero or negative");
+			}
+			_encodingFrequency = value;
+		}
+	}
+	private int _encodingFrequency = DefaultFrequency;
 
 	/// <summary>
 	/// Gets the length of this sample in bytes.
 	/// </summary>
-	public int Length => Data.Length;
+	public int Length => BlockCount * BrrBlockSize;
 
 	/// <summary>
 	/// Gets the length of this sample in blocks.
 	/// </summary>
-	public int BlockCount => Data.Length / BrrBlockSize;
+	public int BlockCount { get; }
+
+	/// <summary>
+	/// Gets the numbers of samples in this BRR file.
+	/// </summary>
+	public int SampleCount => BlockCount * 16;
 
 	/// <summary>
 	/// Gets or sets the SPC sound system's DSP VxPITCH value that corresponds to an audible frequency for a C note.
@@ -134,6 +149,8 @@ public class BRRSample {
 	public BRRSample(int blocks) {
 		ThrowIfBadBlocks(blocks);
 
+		BlockCount = blocks;
+
 		_data = new byte[blocks * BrrBlockSize];
 	}
 
@@ -147,7 +164,9 @@ public class BRRSample {
 			throw new ArgumentException("The input array is not a multiple of 9 bytes in length.", nameof(data));
 		}
 
-		ThrowIfBadBlocks(data.Length / BrrBlockSize);
+		BlockCount = data.Length / BrrBlockSize;
+
+		ThrowIfBadBlocks(BlockCount);
 
 		_data = data[..];
 	}
@@ -170,7 +189,6 @@ public class BRRSample {
 				throw new ArgumentException($"Cannot create a BRR sample with more than {MaxBlocks - 1} blocks.", nameof(blocks));
 		}
 	}
-
 
 	/// <summary>
 	/// Gets a segment of data corresponding to the 9 bytes of the requested block.
@@ -200,7 +218,6 @@ public class BRRSample {
 			lastHeader &= LoopFlagOff;
 		}
 	}
-
 
 	/// <summary>
 	/// Throws an error if the given sample has issues that cannot be fixed programmatically.
@@ -512,7 +529,13 @@ public class BRRSample {
 
 	/// <inheritdoc cref="ValidateBRR(byte[])"/>
 	public static BRRDataIssue ValidateBRR(BRRSample data) {
-		BRRDataIssue ret = ValidateBRRDataBasic(data._data);
+		BRRDataIssue ret = BRRDataIssue.None;
+
+		if (data.Length != data._data.Length) {
+			ret |= BRRDataIssue.WrongBlockCount | BRRDataIssue.Unresolvable;
+		}
+
+		ret |= ValidateBRRDataBasic(data._data);
 
 		if (data.LoopBlock >= data.BlockCount) {
 			ret |= BRRDataIssue.OutOfRangeLoopPoint;

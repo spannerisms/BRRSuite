@@ -60,6 +60,12 @@ public enum BRRDataIssue : int {
 	/// </summary>
 	OutOfRangeLoopPoint       = 1 << 9,
 
+
+	/// <summary>
+	/// Indicates that a <see cref="BRRSample"/> has a mismatch between its internal block count and the actual size of its data. This issue is never resolvable.
+	/// </summary>
+	WrongBlockCount           = 1 << 24,
+
 	/// <summary>
 	/// Indicates issues were found with the data that cannot be fixed without more information.
 	/// </summary>

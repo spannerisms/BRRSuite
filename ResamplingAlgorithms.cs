@@ -23,7 +23,7 @@
 public delegate int[] ResamplingAlgorithm(ReadOnlySpan<int> samples, int inLength, int outLength);
 
 /// <summary>
-/// Combines a <see cref="ResamplingAlgorithm"/> with a human-readable name.
+/// Contains methods for creating <see cref="ResamplingAlgorithm"/> delegates.
 /// </summary>
 public static class ResamplingAlgorithms {
 	/// <summary>

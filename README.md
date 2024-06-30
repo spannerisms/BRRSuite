@@ -12,7 +12,6 @@ This is a C# library for converting modern, uncompressed audio files to the bit-
   * _aitchFactor - whose concerns of, ideas for, and contributions to BRRtools gave me ideas and code to help future proof the implementation of this library
   * Drexxx - who found some better filtering that was relayed to me through _aitchFactor
 
-
 # File formats
 
 ## .brr
@@ -63,4 +62,3 @@ The checksum is calculated as such:
 
 
 An implementation of this algorithm may be found in `BRRSample.GetChecksum(byte[])`.
-

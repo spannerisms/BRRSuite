@@ -7,13 +7,12 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>BRRSuite</PackageId>
     <Title>BRR Suite</Title>
-    <Description>Collection of tools for managing and converting Wave Sound files to Bit Rate Reduction (BRR) for the SNES audio chip.</Description>
+    <Description>Collection of tools and methods for managing and converting Wave Sound files to Bit Rate Reduction (BRR) for the SNES audio chip.</Description>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>
     <SignAssembly>False</SignAssembly>
-    <AssemblyVersion>1.1.0</AssemblyVersion>
-    <FileVersion>1.1.0</FileVersion>
+    <AssemblyVersion>1.2.0</AssemblyVersion>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <EnableNETAnalyzers>False</EnableNETAnalyzers>
