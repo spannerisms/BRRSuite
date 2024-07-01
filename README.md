@@ -47,7 +47,7 @@ In a BRR Suite Sample file (extension: `.brs`), the file contents are a well for
 [^4]: Should be a multiple of 9 bytes in length; otherwise this parameter&mdash;and thus the entire file&mdash;is invalid.
 
 ### Checksum and complement
-The checksum and its complement should have their bits flipped with respect to each other. In other words: `checksum XOR complement = 0x0000`.
+The checksum and its complement should have their bits flipped with respect to each other. In other words: `checksum XOR complement = 0xFFFF`.
 
 The checksum is calculated as such:
 

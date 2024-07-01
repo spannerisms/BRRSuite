@@ -33,8 +33,8 @@ public static class ResamplingAlgorithms {
 	/// • <paramref name="outLength"/> &lt; 1
 	/// </summary>
 	/// <param name="samplesLength">The length of the input data.</param>
-	/// <param name="inLength"><inheritdoc cref="ResamplingAlgorithm" path='/param[@name="inLength"]'/></param>
-	/// <param name="outLength"><inheritdoc cref="ResamplingAlgorithm" path='/param[@name="outLength"]'/></param>
+	/// <param name="inLength"><inheritdoc cref="ResamplingAlgorithm" path="/param[@name='inLength']"/></param>
+	/// <param name="outLength"><inheritdoc cref="ResamplingAlgorithm" path="/param[@name='outLength']"/></param>
 	/// <exception cref="ArgumentException">If a problem occurs</exception>
 	public static void ThrowIfInvalid(int samplesLength, int inLength, int outLength) {
 		if (inLength > samplesLength) {

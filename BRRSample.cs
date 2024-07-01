@@ -168,7 +168,7 @@ public sealed class BRRSample {
 
 		ThrowIfBadBlocks(BlockCount);
 
-		_data = data[..];
+		_data = [.. data];
 	}
 
 	/// <summary>
@@ -196,12 +196,29 @@ public sealed class BRRSample {
 	/// <param name="block">Index of block to cover.</param>
 	/// <returns>A <see cref="Span{T}"/> of type <see langword="byte"/> over the specified block.</returns>
 	/// <exception cref="IndexOutOfRangeException">If the index requested is negative or more than the number of blocks in the sample.</exception>
-	public Span<byte> GetBlockAt(int block) {
-		if (block > BlockCount || block < 0) {
-			throw new IndexOutOfRangeException();
-		}
+	public Span<byte> GetBlockSpan(int block) {
+		ThrowIfOutOfRangeBlock(block);
 
 		return new(_data, block * BrrBlockSize, BrrBlockSize);
+	}
+
+	/// <inheritdoc cref="GetBlockSpan(int)" path="/summary"/>
+	/// <inheritdoc cref="GetBlockSpan(int)" path="/param"/>
+	/// <returns>A <see cref="BRRBlock"/> ref struct over the specified block.</returns>
+	/// <inheritdoc cref="GetBlockSpan(int)" path="/exception"/>
+	public BRRBlock GetBlock(int block) {
+		ThrowIfOutOfRangeBlock(block);
+
+		return new(ref _data[block * BrrBlockSize]);
+	}
+
+	/// <summary>
+	/// Throw if bad.
+	/// </summary>
+	private void ThrowIfOutOfRangeBlock(int block) {
+		if (block > BlockCount || block < 0) {
+			throw new ArgumentOutOfRangeException();
+		}
 	}
 
 	/// <summary>
@@ -563,7 +580,7 @@ public sealed class BRRSample {
 	/// <summary>
 	/// Tests the given sample data for BRR validity with automatic finding of loop point if a header be present.
 	/// </summary>
-	/// <param name="data"><inheritdoc cref="ValidateBRR(byte[])" path='/param[@name="data"]'/></param>
+	/// <param name="data"><inheritdoc cref="ValidateBRR(byte[])" path="/param[@name='data']"/></param>
 	/// <param name="loopBlock">If the given data passes all validity checks and has a 16-bit loop offset header,
 	/// this will contain the index of the BRR block defined by that offset.
 	/// If the data is invalid, no header is present, or the sample should not loop, this will contain -1.

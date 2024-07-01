@@ -40,6 +40,11 @@ public static class Constants {
 	public const byte FilterMask = 0b0000_1100;
 
 	/// <summary>
+	/// A bitmask for block headers to remove the filter.
+	/// </summary>
+	public const byte FilterMaskOff = unchecked((byte) ~FilterMask);
+
+	/// <summary>
 	/// The number of shifts required to normalize the filter ID.
 	/// </summary>
 	public const int FilterShift = 2;
@@ -48,6 +53,11 @@ public static class Constants {
 	/// A bitmask for block headers to isolate the range (sample shift).
 	/// </summary>
 	public const byte RangeMask = 0b1111_0000;
+
+	/// <summary>
+	/// A bitmask for block headers to remove the range (sample shift).
+	/// </summary>
+	public const byte RangeMaskOff = unchecked((byte) ~RangeMask);
 
 	/// <summary>
 	/// The number of shifts required to normalize the range (sample shift).
@@ -60,14 +70,19 @@ public static class Constants {
 	public const byte EndFlag = 0b0000_0001;
 
 	/// <summary>
+	/// A mask that can be used to reset the end flag.
+	/// </summary>
+	public const byte EndFlagOff = unchecked((byte) ~EndFlag);
+
+	/// <summary>
 	/// The bit indicating a sample is to loop.
 	/// </summary>
 	public const byte LoopFlag = 0b0000_0010;
 
 	/// <summary>
-	/// A mask that can be used to disable the loop flag.
+	/// A mask that can be used to reset the loop flag.
 	/// </summary>
-	public const byte LoopFlagOff = 0b1111_1101;
+	public const byte LoopFlagOff = unchecked((byte) ~LoopFlag);
 
 	/// <summary>
 	/// The default value used when a sample has no loop point.

@@ -50,12 +50,10 @@ public static class Conversion {
 	private static readonly PredictionFilter pf2 = PredictionFilter2;
 	private static readonly PredictionFilter pf3 = PredictionFilter3;
 
-
 	/// <summary>
-	/// Gets a delegate encapsulating a filter.
+	/// Returns a <see cref="PredictionFilter"/> delegate encapsulating a filter.
 	/// </summary>
 	/// <param name="filter">The ID of the filter to use.</param>
-	/// <returns>A <see cref="PredictionFilter"/> delegate for the filter.</returns>
 	/// <exception cref="ArgumentOutOfRangeException">The input value cannot be interpreted as a filter</exception>
 	public static PredictionFilter GetPredictionFilter(int filter) => filter switch {
 		0x00 => pf0,
@@ -70,7 +68,7 @@ public static class Conversion {
 	/// Clamps a signed value to 15 bits.
 	/// </summary>
 	/// <param name="v">The value to clamp.</param>
-	/// <returns>A new 15-bit value, sign extended into bits 15..24 if necessary.</returns>
+	/// <returns>A new 15-bit value, sign extended into bits 15 through 24.</returns>
 	public static int Clamp(int v) {
 		if ((short) v != v) {
 			v >>= 31;
@@ -83,23 +81,51 @@ public static class Conversion {
 	/// <summary>
 	/// Clamps a signed value to 15 bits with emulation of the hardware glitches.
 	/// </summary>
-	/// <param name="v"></param>
-	/// <returns>A new 15-bit value.</returns>
+	/// <param name="v">The value to clamp.</param>
+	/// <inheritdoc cref="Clamp(int)" path="/returns"/>
 	public static int Clip(int v) => v switch {
 		>  0x7FFF    => (v + 0x7FFF) & 0x7FFF,
-		< -0x8000    => 0,          // clipped to 0
+//		< -0x8000    => 0,          // clipped to 0 - TODO i think this covers the hardware better than -0x8000?
+		< -0x7FFF    => 0,          // clipped to 0
 		>  0x3FFF    => v - 0x8000, // [4000,7FFF] => [-4000,-1]
 		< -0x4000    => v + 0x8000, // [-8000,-4001] => [0,-3FFF]
 		_            => v,
 	};
 
 	/// <summary>
+	/// Returns the number of 16-sample blocks required to encode a given set of samples.
+	/// </summary>
+	/// <typeparam name="T">A type that can be used to represent a signed number.</typeparam>
+	/// <param name="samples">An array of samples.</param>
+	public static int GetBlockCount<T>(T[] samples) where T : System.Numerics.ISignedNumber<T> {
+		return (samples.Length + 15) / PcmBlockSize; // +15 to round up
+	}
+
+	/// <inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="//summary|//exception"/>
+	/// <param name="pcmBlock"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='pcmBlock']"/></param>
+	/// <param name="brrBlock">
+	///     A span of length 9 over the BRR block that data should be written to.
+	///     See also: <seealso cref="BRRSample.GetBlockSpan(int)"/>.
+	/// </param>
+	/// <param name="range"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='range']"/></param>
+	/// <param name="filter"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='filter']"/></param>
+	/// <param name="p1"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p1']"/></param>
+	/// <param name="p2"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p2']"/></param>
+	public static void EncodeBlock(Span<int> pcmBlock, Span<byte> brrBlock, int range, int filter, ref int p1, ref int p2) {
+		if (brrBlock.Length is not BrrBlockSize) {
+			throw new ArgumentException("The length of the output block must be 9 bytes.", nameof(brrBlock));
+		}
+
+		EncodeBlock(pcmBlock, new BRRBlock(brrBlock), range, filter, ref p1, ref p2);
+	}
+
+	/// <summary>
 	/// <para>
 	///     Encodes a single block of BRR data in-place from a given set of samples.
 	/// </para>
 	/// <para>
-	///     The arguments <paramref name="pcmBlock"/> and <paramref name="brrBlock"/> should be 
-	///     <see cref="Span{T}"/> of the respective type over existing data.
+	///     The parameters <paramref name="pcmBlock"/> and <paramref name="brrBlock"/> should capture
+	///     existing memory containing the input audio samples and the output BRR block, respectively.
 	/// </para>
 	/// <para>
 	///     This method is designed to be chained with itself by using the <see langword="ref"/> parameters
@@ -108,26 +134,14 @@ public static class Conversion {
 	///     • <paramref name="p2"/> is the sample preceding <paramref name="p1"/><br/>
 	///     These previous samples should generally be initialized to 0 at the start of conversion.
 	/// </para>
-	/// <example>
-	/// Example encoding with pre-chosen filters and ranges:
-	/// <code>
-	///    int x1 = 0;
-	///    int x2 = 0;
-	///    for (int i = 0; i &lt; sample.Length; i += 16) {
-	///        var pcmSamples = new Span&lt;int&gt;(sample, i * 16, 16);
-	///        var brrSamples = brr.GetBlockAt(i);
-	///        Conversion.EncodeBlock(pcmSamples, brrSamples, range[i], filter[i], ref x1, ref x2);
-	///    }
-	/// </code>
-	/// </example>
 	/// </summary>
 	/// <param name="pcmBlock">
-	///     A span of length 15 over the waveform block to encode.
+	///     A span of length 16 over the waveform block to encode.
 	///     See also: <seealso cref="WaveContainer.GetBlockAt(int[], int)"/>.
 	/// </param>
 	/// <param name="brrBlock">
-	///     A span of length 9 over the BRR block that data should be written to.
-	///     See also: <seealso cref="BRRSample.GetBlockAt(int)"/>.
+	///     A <see cref="BRRBlock"/> ref struct over the given block to encode.
+	///     See also: <seealso cref="BRRSample.GetBlock(int)"/>.
 	/// </param>
 	/// <param name="range">The number of shifts performed on the 4-bit value of the encoded sample. <c>[1,12]</c></param>
 	/// <param name="filter">The ID of the filter to encode with. <c>[0,1,2,3]</c></param>
@@ -136,17 +150,13 @@ public static class Conversion {
 	///     When this method returns, <paramref name="p1"/> will contain the value of the newly encoded sample.
 	/// </param>
 	/// <param name="p2">
-	///     A reference to the 16-bit value of the second-most-recenently encoded sample.
+	///     A reference to the 15-bit value of the second-most-recenently encoded sample.
 	///     When this method returns, <paramref name="p2"/> will contain the value that <paramref name="p1"/> held when this method was called.
 	/// </param>
 	/// <exception cref="ArgumentException"></exception>
 	/// <exception cref="ArgumentOutOfRangeException"></exception>
-	public static void EncodeBlock(Span<int> pcmBlock, Span<byte> brrBlock, int range, int filter, ref int p1, ref int p2) {
+	public static void EncodeBlock(Span<int> pcmBlock, BRRBlock brrBlock, int range, int filter, ref int p1, ref int p2) {
 		if (pcmBlock.Length is not PcmBlockSize) {
-			throw new ArgumentException("The length of the input block must be 16 PCM samples.", nameof(pcmBlock));
-		}
-
-		if (brrBlock.Length is not BrrBlockSize) {
 			throw new ArgumentException("The length of the input block must be 16 PCM samples.", nameof(pcmBlock));
 		}
 
@@ -154,34 +164,20 @@ public static class Conversion {
 			throw new ArgumentOutOfRangeException("Range should be between 1 and 12, inclusive.", nameof(range));
 		}
 
-		if (filter is < 0 or > 4) {
-			throw new ArgumentOutOfRangeException("Filter should be between 0 and 4, inclusive.", nameof(filter));
+		if (filter is < 0 or > 3) {
+			throw new ArgumentOutOfRangeException("Filter should be between 0 and 3, inclusive.", nameof(filter));
 		}
 
 		// actual algorithm
-		bool odd = false;
+		int brrX = 0;
 
-		int brrX = 1; // start at 1 because header
-
-		int accum = 0;
 		foreach (var sample in pcmBlock) {
-			// add in sample
-			accum |= EncodeSample(sample, out int _, range, filter, ref p1, ref p2);
-
-			if (odd) { // write every other sample
-				brrBlock[brrX++] = (byte) accum; // write latest 2 samples (2 nibbles)
-			}
-
-			odd = !odd;
-
-			// shift everything 4 bits over
-			// the more significant bytes being old data is fine
-			// as this is cast to a byte when written
-			accum <<= 4;
+			brrBlock[brrX++] |= EncodeSample(sample, out int _, range, filter, ref p1, ref p2);
 		}
 
 		// write header
-		brrBlock[0] = (byte) ((range << RangeShift) | (filter << FilterShift));
+		brrBlock.Range = range;
+		brrBlock.Filter = filter;
 	}
 
 	/// <summary>
@@ -191,16 +187,16 @@ public static class Conversion {
 	/// <param name="sample">The signed 16-bit sample to encode.</param>
 	/// <param name="error">When this method returns, this will contain the delta between the original sample and its encoded value.</param>
 	/// <param name="range">
-	///     <inheritdoc cref="EncodeBlock(Span{int}, Span{byte}, int, int, ref int, ref int)" path='/param[@name="range"]'/><br/>
+	///     <inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='range']"/><br/>
 	///     <u><b>Caution:</b></u> this method does not include special casing or error checking for invalid range values.
 	///     The caller of this routine should ensure that only valid ranges are passed to this method before calling.
 	/// </param>
-	/// <param name="filter"><inheritdoc cref="EncodeBlock(Span{int}, Span{byte}, int, int, ref int, ref int)" path='/param[@name="filter"]'/></param>
-	/// <param name="p1"><inheritdoc cref="EncodeBlock(Span{int}, Span{byte}, int, int, ref int, ref int)" path='/param[@name="p1"]'/></param>
-	/// <param name="p2"><inheritdoc cref="EncodeBlock(Span{int}, Span{byte}, int, int, ref int, ref int)" path='/param[@name="p2"]'/></param>
+	/// <param name="filter"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='filter']"/></param>
+	/// <param name="p1"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p1']"/></param>
+	/// <param name="p2"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p2']"/></param>
 	/// <returns>The signed 4-bit value this sample should be encoded as, given the input parameters.</returns>
 	/// <exception cref="ArgumentOutOfRangeException"></exception>
-	public static int EncodeSample(int sample, out int error, int range, int filter, ref int p1, ref int p2) {
+	public static byte EncodeSample(int sample, out int error, int range, int filter, ref int p1, ref int p2) {
 		// this method is an implementation of encoding for the formula:
 		//         s(n) = d * 2^(r-15) + a*s(n-1) + b*s(n-2)
 		//     where:
@@ -223,7 +219,7 @@ public static class Conversion {
 			1 => p1 - (p1 >> 4),
 			2 => p1 * 2 + ((p1 * -3) >> 5) - p2 + (p2 >> 4),
 			3 => p1 * 2 + ((p1 * -13) >> 6) - p2 + ((p2 * 3) >> 4),
-			_ => throw new ArgumentOutOfRangeException("Filter should be between 0 and 4, inclusive.", nameof(filter))
+			_ => throw new ArgumentOutOfRangeException("Filter should be between 0 and 3, inclusive.", nameof(filter))
 		};
 
 		// get the difference between the sample (shifted right to normalize to 15-bit) and the filter addend
@@ -258,7 +254,7 @@ public static class Conversion {
 		error = sample - (p1 << 1);
 
 		// return the 4-bit encoded value
-		return ret;
+		return (byte) ret;
 	}
 
 	/// <summary>
@@ -364,9 +360,9 @@ public static class Conversion {
 	/// <param name="disableFilter1">Requests that the algorithm not perform block encoding with filter 1.</param>
 	/// <param name="disableFilter2">Requests that the algorithm not perform block encoding with filter 2.</param>
 	/// <param name="disableFilter3">Requests that the algorithm not perform block encoding with filter 3.</param>
-	/// <returns>An anonymous function encoding the algorithm.</returns>
+	/// <returns>An delegate function encoding the algorithm.</returns>
 	public static EncodingAlgorithm GetBRRtoolsBruteForce(bool silentStart, bool disableFilter0, bool disableFilter1, bool disableFilter2, bool disableFilter3) =>
-		(int[] samples, int loopBlock) => {
+		(samples, loopBlock) => {
 			int samplesLength = samples.Length;
 			int blockCount = samplesLength / PcmBlockSize;
 

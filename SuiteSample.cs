@@ -35,8 +35,8 @@ public static class SuiteSample {
 	public const int InstrumentNameEnd                     = InstrumentNameLocation+InstrumentNameLength;
 	public const char InstrumentNamePadChar                = ' ';
 
-	public const int PitchLocation                         = MetaBlockLocation+24;
-	public const int EncodingFrequencyLocation             = MetaBlockLocation+28;
+	public const int PitchLocation                         = InstrumentNameEnd;
+	public const int EncodingFrequencyLocation             = InstrumentNameEnd+4;
 
 
 	// Data block
@@ -56,7 +56,4 @@ public static class SuiteSample {
 	public const int SampleLengthLocation                  = DataBlockLocation+11;
 
 	public const int SamplesDataLocation                   = 64;
-
-#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
-
 }
