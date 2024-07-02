@@ -143,7 +143,7 @@ public static class Conversion {
 	///     A <see cref="BRRBlock"/> ref struct over the given block to encode.
 	///     See also: <seealso cref="BRRSample.GetBlock(int)"/>.
 	/// </param>
-	/// <param name="range">The number of shifts performed on the 4-bit value of the encoded sample. <c>[1,12]</c></param>
+	/// <param name="range">The number of shifts performed on the 4-bit value of the encoded sample. <c>[0,12]</c></param>
 	/// <param name="filter">The ID of the filter to encode with. <c>[0,1,2,3]</c></param>
 	/// <param name="p1">
 	///     A reference to the 15-bit value of the most-recently encoded sample.
@@ -160,12 +160,12 @@ public static class Conversion {
 			throw new ArgumentException("The length of the input block must be 16 PCM samples.", nameof(pcmBlock));
 		}
 
-		if (range is < 1 or > 12) {
-			throw new ArgumentOutOfRangeException("Range should be between 1 and 12, inclusive.", nameof(range));
+		if (range is < 0 or > 12) {
+			throw new ArgumentOutOfRangeException("Range must be between 0 and 12, inclusive.", nameof(range));
 		}
 
 		if (filter is < 0 or > 3) {
-			throw new ArgumentOutOfRangeException("Filter should be between 0 and 3, inclusive.", nameof(filter));
+			throw new ArgumentOutOfRangeException("Filter must be between 0 and 3, inclusive.", nameof(filter));
 		}
 
 		// actual algorithm
@@ -262,16 +262,16 @@ public static class Conversion {
 	/// </summary>
 	/// <param name="wavSamples">Input PCM samples.</param>
 	/// <param name="encoder">An encoding algorithm that converts a raw waveform to a BRR sample.</param>
-	/// <param name="resampleAlgorithm">A <see cref="ResamplingAlgorithm"/> that will convert the input wav to a resampled output</param>
+	/// <param name="resampler">A <see cref="ResamplingAlgorithm"/> that will convert the input wav to a resampled output</param>
 	/// <param name="resampleFactor">Desired resampling ratio.</param>
 	/// <param name="truncate">Point at which input wave will be truncated; if 0 or negative, the input is not truncated.</param>
 	/// <param name="loopStart">Starting point of loop in samples</param>
-	/// <param name="trimLeadingZeroes">Enables the encoder to remove leading zeros before adding an initial block</param>
+	/// <param name="trimLeadingZeros">Enables the encoder to remove leading zeros before adding an initial block</param>
 	/// <param name="waveFilters">An array of filters to apply to the sample data after it is resized and resampled.</param>
 	/// <returns>A new <see cref="BRRSample"/> object containing the data and metadata of the converted sample.</returns>
 	/// <exception cref="BRRConversionException"></exception>
-	public static BRRSample Encode(int[] wavSamples, EncodingAlgorithm encoder, ResamplingAlgorithm resampleAlgorithm, decimal resampleFactor,
-		int truncate = -1, int loopStart = NoLoop, bool trimLeadingZeroes = false, PreEncodingFilter[]? waveFilters = null) {
+	public static BRRSample Encode(int[] wavSamples, EncodingAlgorithm encoder, ResamplingAlgorithm resampler, decimal resampleFactor,
+		int truncate = -1, int loopStart = NoLoop, bool trimLeadingZeros = false, PreEncodingFilter[]? waveFilters = null) {
 
 		int samplesLength = wavSamples.Length;
 
@@ -283,7 +283,7 @@ public static class Conversion {
 
 		bool hasLoop = true;
 
-		if (loopStart < 0) {
+		if (loopStart < 0 || loopStart >= truncate) {
 			hasLoop = false;
 			loopStart = truncate;
 		}
@@ -306,7 +306,7 @@ public static class Conversion {
 
 		decimal bsResampleRatio = (decimal) samplesLength / targetLength;
 
-		int[] samples = resampleAlgorithm(wavSamples, samplesLength, targetLength);
+		int[] samples = resampler(wavSamples, samplesLength, targetLength);
 
 		// Apply any filters to the sample now
 		if (waveFilters is not null) {
@@ -321,7 +321,7 @@ public static class Conversion {
 			});
 		}
 
-		if (trimLeadingZeroes) {
+		if (trimLeadingZeros) {
 			int fzero = Array.FindIndex(samples, i => i is not 0);
 			// if you get -1, wtf happened to your sample?
 			if (fzero is > 0) {
@@ -598,6 +598,7 @@ public static class Conversion {
 		);
 	}
 
+	// TODO decoding is apparently done with 16.16 fixed point, so maybe try to emulate that instead of floats and see if there's a difference
 	/// <summary>
 	/// Decodes a given stream of BRR data into a Wave Sound audio file.
 	/// </summary>

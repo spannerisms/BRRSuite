@@ -195,7 +195,7 @@ public sealed class BRRSample {
 	/// </summary>
 	/// <param name="block">Index of block to cover.</param>
 	/// <returns>A <see cref="Span{T}"/> of type <see langword="byte"/> over the specified block.</returns>
-	/// <exception cref="IndexOutOfRangeException">If the index requested is negative or more than the number of blocks in the sample.</exception>
+	/// <exception cref="ArgumentOutOfRangeException">If the index requested is negative or more than the number of blocks in the sample.</exception>
 	public Span<byte> GetBlockSpan(int block) {
 		ThrowIfOutOfRangeBlock(block);
 

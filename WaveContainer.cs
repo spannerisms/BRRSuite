@@ -344,10 +344,10 @@ public sealed class WaveContainer {
 	/// <param name="samples">The samples to get a block of.</param>
 	/// <param name="block">Index of block to cover.</param>
 	/// <returns>A <see cref="Span{T}"/> of length 16 over the specified block.</returns>
-	/// <exception cref="IndexOutOfRangeException">If the index requested is negative or more than the number of blocks in the sample.</exception>
+	/// <exception cref="ArgumentOutOfRangeException">If the index requested is negative or more than the number of blocks in the sample.</exception>
 	public static Span<int> GetBlockAt(int[] samples, int block) {
 		if (block >= (samples.Length / PcmBlockSize) || block < 0) {
-			throw new IndexOutOfRangeException();
+			throw new ArgumentOutOfRangeException();
 		}
 
 		return new(samples, block * PcmBlockSize, PcmBlockSize);
@@ -356,7 +356,7 @@ public sealed class WaveContainer {
 	/// <inheritdoc cref="GetBlockAt(int[], int)"/>
 	public static Span<short> GetBlockAt(short[] samples, int block) {
 		if (block >= (samples.Length / PcmBlockSize) || block < 0) {
-			throw new IndexOutOfRangeException();
+			throw new ArgumentOutOfRangeException();
 		}
 
 		return new(samples, block * PcmBlockSize, PcmBlockSize);
