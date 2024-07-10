@@ -1,4 +1,6 @@
-﻿namespace BRRSuite;
+﻿// BRR Suite is licensed under the MIT license.
+
+namespace BRRSuite;
 
 /// <summary>
 /// The exception that is thrown when a problem occurs preventing the proper encoding or decoding of BRR or audio data.

@@ -1,7 +1,9 @@
-﻿namespace BRRSuite;
+﻿// BRR Suite is licensed under the MIT license.
+
+namespace BRRSuite;
 
 /// <summary>
-/// Contains sample data and metadata about a Bit Rate Reduction sample.
+/// Container for Bit Rate Reduction sample data.
 /// </summary>
 public sealed class BRRSample {
 	/// <summary>
@@ -15,44 +17,25 @@ public sealed class BRRSample {
 	public const string HeaderedExtension = "brh";
 
 	// a very generous limit to the size of the file.
-	private const int MaxSize = 0xFF00;
-	private const int MaxBlocks = MaxSize / BrrBlockSize;
-
-	/// <summary>
-	/// Gets or sets the instrument name associated with this sample.
-	/// The name should be exactly 24 characters in length (padded with spaces if necessary) and only use ASCII characters.
-	/// These are enforced by the property setter.
-	/// </summary>
-	public string InstrumentName {
-		get => _name;
-		set {
-			// sanitize to ascii
-			value = string.Concat(value.Where(c => char.IsAscii(c) && !char.IsControl(c)));
-
-			// enforce length
-			_name = value.Length switch {
-				SuiteSample.InstrumentNameLength => value,
-				< SuiteSample.InstrumentNameLength => value.PadRight(SuiteSample.InstrumentNameLength, SuiteSample.InstrumentNamePadChar),
-				> SuiteSample.InstrumentNameLength => value[..SuiteSample.InstrumentNameLength]
-			};
-		}
-	}
-
-	// default name
-	private string _name = new(SuiteSample.InstrumentNamePadChar, SuiteSample.InstrumentNameLength);
+	private const int MaxSize = 0xFFF9;
+	private const int MaxBlocks = MaxSize / BRRBlockSize;
 
 	/// <summary>
 	/// Gets or sets the block within this sample that will be looped to when it reaches the end.
-	/// An invalid value will be changed to -1.
 	/// </summary>
+	/// <remarks>
+	/// No loop is indicated by <c>-1</c>.
+	/// Invalid values will be changed to <c>-1</c>.
+	/// </remarks>
 	public int LoopBlock {
 		get => _loopblock;
 		set {
 			// prevent invalid loop points and standardize negative values
-			if (value < 0 || value >= BlockCount) {
+			if (value < 0 || value >= _blockCount) {
 				_loopblock = NoLoop;
 				return;
 			}
+
 			_loopblock = value;
 		}
 	}
@@ -62,131 +45,98 @@ public sealed class BRRSample {
 	/// <summary>
 	/// Gets the location of this sample's loop point as an offset in bytes.
 	/// </summary>
-	public int LoopPoint => _loopblock switch {
-		< 0 => NoLoop,
-		_ => _loopblock * BrrBlockSize
-	};
+	public int LoopPoint => _loopblock < 0 ? NoLoop : _loopblock * BRRBlockSize;
 
 	/// <summary>
-	/// Gets whether or not this sample should loop, based on the existence of a loop point.
+	/// Whether or not this sample should loop based on the existence of a loop point.
 	/// </summary>
 	public bool IsLooping => _loopblock >= 0;
-
-	private bool HasLoopFlag => (_data[^BrrBlockSize] & LoopFlag) == LoopFlag;
-
-	/// <summary>
-	/// Gets the resampling ratio this sample was encoded at, relative its original sample. Defaults to 1.0.
-	/// </summary>
-	public decimal ResampleRatio { get; internal set; } = 1.0M;
-
-	/// <summary>
-	/// Gets or sets the target frequency this sample was encoded at. Defaults to 32000.
-	/// This value should not be zero or negative.
-	/// </summary>
-	public int EncodingFrequency {
-		get => _encodingFrequency;
-		set {
-			if (value < 1) {
-				throw new ArgumentOutOfRangeException(null, "Encoding frequency cannot be zero or negative");
-			}
-			_encodingFrequency = value;
-		}
-	}
-	private int _encodingFrequency = DefaultFrequency;
-
-	/// <summary>
-	/// Gets the length of this sample in bytes.
-	/// </summary>
-	public int Length => BlockCount * BrrBlockSize;
 
 	/// <summary>
 	/// Gets the length of this sample in blocks.
 	/// </summary>
-	public int BlockCount { get; }
+	public int BlockCount => _blockCount;
+
+	private readonly int _blockCount;
+
+	/// <summary>
+	/// Gets the length of this sample in bytes.
+	/// </summary>
+	public int Length => _blockCount * BRRBlockSize;
 
 	/// <summary>
 	/// Gets the numbers of samples in this BRR file.
 	/// </summary>
-	public int SampleCount => BlockCount * 16;
-
-	/// <summary>
-	/// Gets or sets the SPC sound system's DSP VxPITCH value that corresponds to an audible frequency for a C note.
-	/// <list type="bullet">
-	/// <item>The value <c>0x1000</c> corresponds to no frequency change on playback; i.e., a 32kHz sample being played at 32kHz.</item>
-	/// <item>The value <c>0x0000</c> indicates the frequency of C for this sample is not known.</item>
-	/// <item>Values of <c>0x4000</c> and higher are considered invalid. Removal of these bits is enforced by the property setter.</item>
-	/// </list>
-	/// </summary>
-	public int VxPitch {
-		get => _vxpitch;
-		set => _vxpitch = (ushort) (value & 0x3FFF);
-	}
-
-	private ushort _vxpitch = 0x1000;
-
-	/// <summary>
-	/// Gets the raw data stream of this BRR sample.
-	/// </summary>
-	public byte[] Data => _data;
+	public int SampleCount => _blockCount * PCMBlockSize;
 
 	// Why are you reading this? Can't you see that it says "private"?
 	private readonly byte[] _data;
 
 	/// <summary>
-	/// Gets or sets the data at a given index.
+	/// Gets or sets the data byte at a given index.
 	/// </summary>
-	public byte this[Index i] {
-		get => _data[i];
-		set => _data[i] = value;
+	public byte this[Index index] {
+		get => _data[index];
+		set => _data[index] = value;
 	}
 
 	/// <summary>
-	/// Creates a new instance of the <see cref="BRRSample"/> class with the specified number of blocks.
-	/// The total size of the samples data will be <paramref name="blocks"/> * 9.
+	/// Creates a new instance of the <see cref="BRRSample"/> class with the specified number of empty blocks.
 	/// </summary>
-	/// <param name="blocks">The number of 72-bit blocks to alllocate for this sample.</param>
-	/// <exception cref="ArgumentException">If the number of blocks requested is 0, negative, or too many blocks.</exception>
-	public BRRSample(int blocks) {
-		ThrowIfBadBlocks(blocks);
+	/// <param name="blockCount">The number of 72-bit blocks to allocate for this sample.</param>
+	/// <exception cref="ArgumentException">If the number of blocks requested is 0, negative, or too many.</exception>
+	public BRRSample(int blockCount) {
+		ThrowIfBadBlocks(blockCount);
 
-		BlockCount = blocks;
-
-		_data = new byte[blocks * BrrBlockSize];
+		_blockCount = blockCount;
+		_data = new byte[blockCount * BRRBlockSize];
 	}
 
 	/// <summary>
 	/// Creates a new instance of the <see cref="BRRSample"/> class with a copy of the given data.
 	/// </summary>
-	/// <param name="data">The BRR data to use for this sample. The length of this array should be a multiple of 9.</param>
-	/// <exception cref="ArgumentException">If the input array is empty or too large.</exception>
+	/// <param name="data">The BRR data to use for this sample. The length of this data must be a multiple of 9.</param>
+	/// <exception cref="ArgumentException">If the input data is empty or too large.</exception>
 	public BRRSample(byte[] data) {
-		if ((data.Length % BrrBlockSize) is not 0) {
-			throw new ArgumentException("The input array is not a multiple of 9 bytes in length.", nameof(data));
+		ThrowIfBadInputData(data.Length);
+
+		_blockCount = data.Length / BRRBlockSize;
+		_data = [.. data];
+	}
+
+	/// <inheritdoc cref="BRRSample(byte[])"/>
+	public BRRSample(Span<byte> data) {
+		ThrowIfBadInputData(data.Length);
+
+		_blockCount = data.Length / BRRBlockSize;
+		_data = [.. data];
+	}
+
+	/// <summary>
+	/// Throws if not a multiple of 9, then checks for bad block count.
+	/// </summary>
+	private static void ThrowIfBadInputData(int length) {
+		if ((length % BRRBlockSize) is not 0) {
+			throw new ArgumentException("The input data is not a multiple of 9 bytes in length.");
 		}
 
-		BlockCount = data.Length / BrrBlockSize;
-
-		ThrowIfBadBlocks(BlockCount);
-
-		_data = [.. data];
+		ThrowIfBadBlocks(length / BRRBlockSize);
 	}
 
 	/// <summary>
 	/// Checks if the number of blocks being encoded is valid.
 	/// Throws an exception if it is not.
 	/// </summary>
-	/// <param name="blocks">The number of blocks being encoded.</param>
-	/// <exception cref="ArgumentException"></exception>
 	private static void ThrowIfBadBlocks(int blocks) {
 		switch (blocks) {
 			case 0:
-				throw new ArgumentException("Cannot create a BRR sample with 0 blocks.", nameof(blocks));
+				throw new ArgumentException("Cannot create a BRR sample with 0 blocks.");
 
 			case < 0:
-				throw new ArgumentException("Cannot create a BRR sample with a negative number of blocks.", nameof(blocks));
+				throw new ArgumentException("Cannot create a BRR sample with a negative number of blocks.");
 
 			case >= MaxBlocks:
-				throw new ArgumentException($"Cannot create a BRR sample with more than {MaxBlocks - 1} blocks.", nameof(blocks));
+				throw new ArgumentException($"Cannot create a BRR sample with more than {MaxBlocks - 1} blocks.");
 		}
 	}
 
@@ -194,475 +144,172 @@ public sealed class BRRSample {
 	/// Gets a segment of data corresponding to the 9 bytes of the requested block.
 	/// </summary>
 	/// <param name="block">Index of block to cover.</param>
-	/// <returns>A <see cref="Span{T}"/> of type <see langword="byte"/> over the specified block.</returns>
-	/// <exception cref="ArgumentOutOfRangeException">If the index requested is negative or more than the number of blocks in the sample.</exception>
-	public Span<byte> GetBlockSpan(int block) {
-		ThrowIfOutOfRangeBlock(block);
-
-		return new(_data, block * BrrBlockSize, BrrBlockSize);
-	}
-
-	/// <inheritdoc cref="GetBlockSpan(int)" path="/summary"/>
-	/// <inheritdoc cref="GetBlockSpan(int)" path="/param"/>
 	/// <returns>A <see cref="BRRBlock"/> ref struct over the specified block.</returns>
-	/// <inheritdoc cref="GetBlockSpan(int)" path="/exception"/>
+	/// <exception cref="ArgumentOutOfRangeException">If the index requested is negative or more than the number of blocks in the sample.</exception>
 	public BRRBlock GetBlock(int block) {
 		ThrowIfOutOfRangeBlock(block);
 
-		return new(ref _data[block * BrrBlockSize]);
+		return new(ref _data[block * BRRBlockSize]);
 	}
 
 	/// <summary>
 	/// Throw if bad.
 	/// </summary>
 	private void ThrowIfOutOfRangeBlock(int block) {
-		if (block > BlockCount || block < 0) {
-			throw new ArgumentOutOfRangeException();
+		if (block >= _blockCount || block < 0) {
+			throw new ArgumentOutOfRangeException($"Tried to index a block outside of the sample: {block} / {_blockCount}", innerException: null);
 		}
 	}
 
 	/// <summary>
-	/// Adjusts the header of the final block to include the end of sample flag
-	/// and corrects the loop flag based on the existence of a loop point.
+	/// Corrects the usage of the end and loop flags.
 	/// </summary>
-	public void FixEndBlock() {
-		ref byte lastHeader = ref _data[^BrrBlockSize];
+	/// <remarks>
+	/// The final block header will have its end flag set,
+	/// along with the loop flag if a loop point is defined.
+	/// Both flags will be removed from all other block headers.
+	/// </remarks>
+	public void CorrectEndFlags() {
+		const byte BothFlagsOff = unchecked((byte) ~(LoopFlag | EndFlag));
+
+		int len = _data.Length;
+
+		// remove from every block, including the final block
+		for (int i = 0; i < len; i += BRRBlockSize) {
+			_data[i] &= BothFlagsOff;
+		}
+
+		// add back to the final block header
+		ref byte lastHeader = ref _data[^BRRBlockSize];
+
 		lastHeader |= EndFlag;
-		
+
 		if (IsLooping) {
 			lastHeader |= LoopFlag;
-		} else {
-			lastHeader &= LoopFlagOff;
 		}
 	}
 
 	/// <summary>
-	/// Throws an error if the given sample has issues that cannot be fixed programmatically.
+	/// Returns the raw data of this sample in a new array.
 	/// </summary>
-	/// <param name="brr">The sample to validate.</param>
+	/// <returns>A new <see langword="byte"/>[] with a copy of the underlying data.</returns>
+	public byte[] ToArray() {
+		return [.. _data];
+	}
+
+	/// <summary>
+	/// Returns the raw data of this sample covered by a span.
+	/// </summary>
+	/// <returns>A span covering the raw data.</returns>
+	public Span<byte> AsSpan() {
+		return _data.AsSpan();
+	}
+
+	/// <summary>
+	/// Throws an exception if the sample has issues that cannot be fixed programmatically.
+	/// </summary>
 	/// <exception cref="BRRConversionException">An unresolvable issue was found.</exception>
-	private static void ThrowIfUnresolvableIssues(BRRSample brr) {
-		BRRDataIssue issues = ValidateBRR(brr);
+	internal void ThrowIfUnresolvableIssues() {
+		BRRDataIssue issues = Validate();
 
 		if (issues.HasFlag(BRRDataIssue.Unresolvable)) {
 			throw new BRRConversionException("There were unresolvable issues with this object's data.");
 		}
-
-		// Force validation to run on the name as a precaution
-		brr.InstrumentName = brr._name;
-
-		if (brr.InstrumentName.Length is not SuiteSample.InstrumentNameLength) {
-			throw new BRRConversionException($"Something went terribly wrong with the name: \"{brr.InstrumentName}\" (length: {brr.InstrumentName.Length})");
-		}
 	}
 
 	/// <summary>
-	/// Exports this sample's data to a raw BRR file.
-	/// The extension of the exported file will be added or changed to the preferred extension defined by <see cref="Extension"/>.
+	/// Saves this sample to the given file location.
 	/// </summary>
 	/// <param name="path">The relative or absolute path this sample should be saved to.</param>
-	/// <exception cref="BRRConversionException">Data being exported is malformed.</exception>
-	public void ExportRaw(string path) {
-		ThrowIfUnresolvableIssues(this);
-
-		path = Path.ChangeExtension(path, Extension);
+	/// <exception cref="BRRConversionException">Data being saved is malformed.</exception>
+	public void Save(string path) {
+		ThrowIfUnresolvableIssues();
 
 		using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
 
 		fs.Write(_data);
-		fs.Flush();
 	}
 
 	/// <summary>
 	/// Exports this sample's data to a raw BRR file with a loop offset header.
-	/// The extension of the exported file will be added or changed to the preferred extension defined by <see cref="HeaderedExtension"/>.
 	/// </summary>
-	/// <inheritdoc cref="ExportRaw(string)" path="/param" />
-	/// <inheritdoc cref="ExportRaw(string)" path="/exception" />
-	public void ExportHeadered(string path) {
-		ThrowIfUnresolvableIssues(this);
+	/// <inheritdoc cref="Save(string)" path="/param" />
+	/// <inheritdoc cref="Save(string)" path="/exception" />
+	public void ExportWithHeader(string path) {
+		ThrowIfUnresolvableIssues();
 
-		path = Path.ChangeExtension(path, HeaderedExtension);
 		using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
 
-		int loopPoint = IsLooping ? LoopPoint : BlockCount;
+		int loopPoint = IsLooping ? LoopPoint : SampleCount;
 
 		fs.WriteByte((byte) loopPoint);
 		fs.WriteByte((byte) (loopPoint >> 8));
 
 		fs.Write(_data);
-		fs.Flush();
 	}
 
 	/// <summary>
-	/// Creates a new <see cref="BRRSample"/> from data contained in a BRR Suite Sample file.
-	/// </summary>
-	/// <param name="path">The absolute or relative path to the file.</param>
-	/// <returns>A new <see cref="BRRSample"/> object containing the data.</returns>
-	/// <exception cref="BRRConversionException"></exception>
-	public static BRRSample ReadSuiteFile(string path) {
-		using var rd = new FileStream(path, FileMode.Open, FileAccess.Read);
-
-		// Verify
-		var data = new byte[(int) rd.Length];
-		rd.Read(data, 0, data.Length);
-
-		rd.Close();
-
-		if (!VerifySuiteSample(data, out string? msg)) {
-			throw new BRRConversionException(msg);
-		}
-
-		int blocks = ReadShort(SuiteSample.SampleBlocksLocation);
-
-		string name = new(data[SuiteSample.InstrumentNameLocation..SuiteSample.InstrumentNameEnd].Select(c=>(char) c).ToArray());
-
-		BRRSample ret = new(blocks){
-			InstrumentName = name,
-			LoopBlock = ReadShort(SuiteSample.LoopBlockLocation),
-			EncodingFrequency = ReadInt(SuiteSample.EncodingFrequencyLocation),
-			VxPitch = ReadShort(SuiteSample.PitchLocation),
-		};
-
-		Array.Copy(data, SuiteSample.SamplesDataLocation, ret._data, 0, data.Length-SuiteSample.SamplesDataLocation);
-
-		return ret;
-
-		int ReadShort(int i) {
-			return data[i] | (data[i + 1] << 8);
-		}
-
-		int ReadInt(int i) {
-			return data[i] | (data[i + 1] << 8) | (data[i + 2] << 16) | (data[i + 3] << 24);
-		}
-	}
-
-	/// <summary>
-	/// Tests a stream of data for a properly-formed BRR Suite Sample file header and valid BRR data.
-	/// </summary>
-	/// <param name="data">The data to validate.</param>
-	/// <param name="message">A string containing a message about where, if at all, the data was deemed invalid.</param>
-	/// <returns><see langword="true"/> if the file is valid; otherwise <see langword="false"/>.</returns>
-	public static bool VerifySuiteSample(byte[] data, out string? message) {
-		// check for a valid file size
-		int length = data.Length;
-
-		ushort rd16, rd16b;
-
-		if (length < (SuiteSample.SamplesDataLocation + 9)) {
-			message = $"File is too small to be a {SuiteSample.FormatName} file.";
-			return false;
-		}
-
-		// check the signatures
-		string? badMSG = TestSubstring(SuiteSample.FormatSignatureLocation, SuiteSample.FormatSignature);
-		if (badMSG is not null) {
-			message = badMSG;
-			return false;
-		}
-
-		badMSG = TestSubstring(SuiteSample.MetaBlockSignatureLocation, SuiteSample.MetaBlockSignature);
-		if (badMSG is not null) {
-			message = badMSG;
-			return false;
-		}
-
-		badMSG = TestSubstring(SuiteSample.DataBlockSignatureLocation, SuiteSample.DataBlockSignature);
-		if (badMSG is not null) {
-			message = badMSG;
-			return false;
-		}
-
-		int samplesLength = length - SuiteSample.SamplesDataLocation;
-
-		if ((samplesLength % BrrBlockSize) != 0) {
-			message = $"Sample data is not a multiple of {BrrBlockSize} bytes: {samplesLength}";
-			return false;
-		}
-
-		// checksums
-		rd16 = GetChecksum(data[SuiteSample.SamplesDataLocation..]);
-		rd16b = ReadShort(SuiteSample.ChecksumLocation);
-		if (rd16 != rd16b) {
-			message = $"Bad checksum: {rd16b:X4} | Expected: {rd16:X4}";
-			return false;
-		}
-
-		rd16b = ReadShort(SuiteSample.ChecksumComplementLocation);
-		rd16 ^= 0xFFFF;
-		if (rd16 != rd16b) {
-			message = $"Bad checksum complement: {rd16b:X4} | Expected: {rd16:X4}";
-			return false;
-		}
-
-		
-		rd16 = ReadShort(SuiteSample.SampleLengthLocation);
-		if (samplesLength != rd16) {
-			message = $"Incorrect length: {rd16} | Expected: {samplesLength}";
-			return false;
-		}
-
-		rd16 = ReadShort(SuiteSample.SampleBlocksLocation);
-
-		if ((rd16 * BrrBlockSize) != samplesLength) {
-			message = $"Incorrect block count: {rd16} | Expected: {samplesLength / BrrBlockSize}";
-			return false;
-		}
-
-		rd16 = ReadShort(SuiteSample.LoopBlockLocation);
-		rd16b = ReadShort(SuiteSample.LoopPointLocation);
-
-		if ((rd16 * BrrBlockSize) != rd16b) {
-			message = $"Loop block and loop point do not match: b:[{rd16}, {rd16* BrrBlockSize}] | l:[{rd16b / BrrBlockSize},{rd16b}]";
-			return false;
-		}
-
-		byte loopType = data[SuiteSample.LoopTypeLocation];
-
-		if (rd16b >= length && loopType is SuiteSample.LoopingSample) {
-			message = $"Invalid loop point: {rd16b}";
-			return false;
-		}
-
-		bool hasLoopFlag = (data[^BrrBlockSize] & LoopFlag) is LoopFlag;
-
-		switch (loopType, hasLoopFlag) {
-			case (SuiteSample.NonloopingSample, true):
-			case (SuiteSample.LoopingSample, false):
-			case (SuiteSample.ForeignLoopingSample, false):
-				message = $"Loop type does not match final block header.";
-				return false;
-		}
-
-		if ((data[^BrrBlockSize] & EndFlag) is 0) {
-			message = $"The sample data does not contain an end flag on the final block header.";
-			return false;
-		}
-
-		samplesLength -= BrrBlockSize;
-
-		for (int i = 0; i < samplesLength; i += BrrBlockSize) {
-			if ((data[SuiteSample.SamplesDataLocation + i] & EndFlag) is EndFlag) {
-				message = $"The sample data contains too many end block flags.";
-				return false;
-			}
-		}
-
-		// Valid file!
-		message = null;
-
-		return true;
-
-		string? TestSubstring(int start, string test) {
-			var s = data[start..(start + 4)];
-			string result = new(s.Select(o => (char) o).ToArray());
-
-			if (result == test) {
-				return null;
-			}
-
-			return $"Bad signature at {start}: {result} | Expected: {test}";
-		}
-
-		ushort ReadShort(int i) {
-			return (ushort) (data[i] | (data[i + 1] << 8));
-		}
-
-	}
-
-	/// <summary>
-	/// Exports this sample's data to a BRR Suite Sample file.
-	/// The extension of the exported file will be added or changed to the preferred extension defined by <see cref="SuiteSample.Extension"/>.
-	/// </summary>
-	/// <inheritdoc cref="ExportRaw(string)" path="/param" />
-	/// <inheritdoc cref="ExportRaw(string)" path="/exception" />
-	public void ExportSuiteSample(string path) {
-		ThrowIfUnresolvableIssues(this);
-
-		byte[] header = new byte[SuiteSample.SamplesDataLocation];
-
-		// header
-		WriteString(SuiteSample.FormatSignature, SuiteSample.FormatSignatureLocation);
-
-		ushort cksm = GetChecksum(this);
-		WriteShort(cksm, SuiteSample.ChecksumLocation);
-		WriteShort(~cksm, SuiteSample.ChecksumComplementLocation);
-
-		// meta block
-		WriteString(SuiteSample.MetaBlockSignature, SuiteSample.MetaBlockSignatureLocation);
-		WriteString(InstrumentName, SuiteSample.InstrumentNameLocation);
-		WriteShort(VxPitch, SuiteSample.PitchLocation);
-		WriteInt(EncodingFrequency, SuiteSample.EncodingFrequencyLocation);
-
-		// 7 unused bytes
-
-		// data block
-		WriteString(SuiteSample.DataBlockSignature, SuiteSample.DataBlockSignatureLocation);
-		header[SuiteSample.LoopTypeLocation] = IsLooping ? SuiteSample.LoopingSample : SuiteSample.NonloopingSample;
-
-		int loopBlock = IsLooping ? LoopBlock : 0x0000;
-
-		WriteShort(loopBlock, SuiteSample.LoopBlockLocation);
-		WriteShort(loopBlock * BrrBlockSize, SuiteSample.LoopPointLocation);
-		WriteShort(BlockCount, SuiteSample.SampleBlocksLocation);
-		WriteShort(Data.Length, SuiteSample.SampleLengthLocation);
-
-		path = Path.ChangeExtension(path, SuiteSample.Extension);
-		using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
-
-		fs.Write(header);
-		fs.Write(Data);
-		fs.Flush();
-
-		void WriteString(string s, int i) {
-			foreach (var c in s) {
-				header[i++] = (byte) c;
-			}
-		}
-
-		void WriteInt(int w, int i) {
-			header[i + 0] = (byte) w;
-			header[i + 1] = (byte) (w >> 8);
-			header[i + 2] = (byte) (w >> 16);
-			header[i + 3] = (byte) (w >> 24);
-		}
-
-		void WriteShort(int w, int i) {
-			w &= 0xFFFF;
-			header[i + 0] = (byte) w;
-			header[i + 1] = (byte) (w >> 8);
-		}
-
-	}
-
-	/// <summary>
-	/// Tests the given sample data for BRR validity. This method expects unheadered data.
+	/// Tests the given data for BRR validity. This method expects unheadered data.
 	/// </summary>
 	/// <param name="data">The data to validate.</param>
 	/// <returns>A <see cref="BRRDataIssue"/> enum flagging any problems found with the data.</returns>
-	public static BRRDataIssue ValidateBRR(byte[] data) {
-		return ValidateBRRDataBasic(data);
+	public static BRRDataIssue ValidateBRRData(byte[] data) {
+		return ValidateBRRData(data.AsSpan());
 	}
 
-	/// <inheritdoc cref="ValidateBRR(byte[])"/>
-	public static BRRDataIssue ValidateBRR(BRRSample data) {
+	/// <inheritdoc cref="ValidateBRRData(byte[])"/>
+	public static BRRDataIssue ValidateBRRData(Span<byte> data) {
+		int len = data.Length;
+
 		BRRDataIssue ret = BRRDataIssue.None;
 
-		if (data.Length != data._data.Length) {
-			ret |= BRRDataIssue.WrongBlockCount | BRRDataIssue.Unresolvable;
+		if (len < BRRBlockSize) { // Files that are too small are invalid
+			ret = BRRDataIssue.BadAlignment | BRRDataIssue.DataTooSmall | BRRDataIssue.Unresolvable;
+		} else if (len >= MaxSize) { // Files that are too big are invalid
+			ret = BRRDataIssue.DataTooLarge | BRRDataIssue.Unresolvable;
 		}
 
-		ret |= ValidateBRRDataBasic(data._data);
-
-		if (data.LoopBlock >= data.BlockCount) {
-			ret |= BRRDataIssue.OutOfRangeLoopPoint;
-
-			if (data.HasLoopFlag) {
-				ret |= BRRDataIssue.Unresolvable;
-			}
+		// must be a multiple of 9
+		if ((len % BRRBlockSize) != 0) {
+			ret |= BRRDataIssue.BadAlignment | BRRDataIssue.Unresolvable;
 		}
 
-		if (data.HasLoopFlag) {
-			// if there's a loop flag but no specified block, then there's an issue
-			if (!data.IsLooping) {
-				ret |= BRRDataIssue.Unresolvable | BRRDataIssue.MissingLoopPoint;
-			}
-		} else {
-			// if there's no loop flag, assume an in-range loop point means there should in fact be a loop
-			if (data.LoopBlock >= 0 && data.LoopBlock < data.BlockCount) {
-				ret |= BRRDataIssue.MissingLoopFlag;
-			}
-		}
-
-		return ret;
-	}
-
-	/// <summary>
-	/// Tests the given sample data for BRR validity with automatic finding of loop point if a header be present.
-	/// </summary>
-	/// <param name="data"><inheritdoc cref="ValidateBRR(byte[])" path="/param[@name='data']"/></param>
-	/// <param name="loopBlock">If the given data passes all validity checks and has a 16-bit loop offset header,
-	/// this will contain the index of the BRR block defined by that offset.
-	/// If the data is invalid, no header is present, or the sample should not loop, this will contain -1.
-	/// </param>
-	/// <inheritdoc cref="ValidateBRR(byte[])" path="/returns"/>
-	public static BRRDataIssue ValidateBRRWithHeader(byte[] data, out int loopBlock) {
-		// Validate alignment
-		int len = data.Length;
-		int dataStart = len % BrrBlockSize;
-
-		loopBlock = NoLoop;
-
-		// no header
-		if (dataStart is 0) {
-			return ValidateBRR(data);
-		}
-
-		// bad size
-		if (dataStart is not 2) {
-			return BRRDataIssue.Unresolvable | BRRDataIssue.WrongAlignmentForHeadered | BRRDataIssue.WrongAlignment;
-		}
-
-		// do quick bounds check before passing to the basic validater
-		if (len < 9) {
-			return BRRDataIssue.Unresolvable | BRRDataIssue.DataTooSmall;
-		}
-
-		// Get loop point if from header
-		int loopStart = data[0] | (data[1] << 8);
-
-		// Perform validity checks
-		BRRDataIssue ret = ValidateBRRDataWithLoop(new(data, 2, len - 2), loopStart);
-
-		// give up if there are unresolvable issues
+		// if we're unresolvable here
+		// there's a problem with the size
+		// so just give up
 		if (ret.HasFlag(BRRDataIssue.Unresolvable)) {
 			return ret;
 		}
 
-		bool hasLoopFlag = (data[^BrrBlockSize] & LoopFlag) != LoopFlag;
-
-		if (hasLoopFlag) {
-			loopBlock = loopStart / BrrBlockSize;
-		}
-
-		// Valid file
-		return ret;
-	}
-
-	/// <summary>
-	/// Performs a basic validity check on data for BRR compliance.
-	/// </summary>
-	/// <inheritdoc cref="ValidateBRR(byte[])" path="/returns"/>
-	private static BRRDataIssue ValidateBRRDataBasic(Span<byte> data) {
-		int len = data.Length;
-
-		// Files that are too small are invalid
-		if (len < BrrBlockSize) {
-			return BRRDataIssue.Unresolvable | BRRDataIssue.DataTooSmall | BRRDataIssue.WrongAlignment;
-		}
-
-		if (len >= MaxSize) {
-			return BRRDataIssue.DataTooLarge;
-		}
-
-		// must be a multiple of 9
-		if ((len % BrrBlockSize) is not 0) {
-			return BRRDataIssue.Unresolvable | BRRDataIssue.WrongAlignment;
-		}
-
-		BRRDataIssue ret = BRRDataIssue.None;
-
 		// need end flag on last block
-		if ((data[^BrrBlockSize] & EndFlag) != EndFlag) {
-			ret |= BRRDataIssue.MissingEndFlag;
+		if ((data[^BRRBlockSize] & EndFlag) != EndFlag) {
+			ret |= BRRDataIssue.MissingEndFlag | BRRDataIssue.UndefinedBehavior;
+		}
+
+		// check for potential block 0 issues
+		if ((data[0] & FilterMask) != 0) {
+			ret |= BRRDataIssue.Block0Filter | BRRDataIssue.UndefinedBehavior;
+		}
+
+		//    sample 3 only   + samples 1,2
+		if (((data[2] & 0xF0) | data[1]) != 0) {
+			ret |= BRRDataIssue.Block0Samples | BRRDataIssue.UndefinedBehavior;
+		}
+
+		// check for bad ranges
+		for (int i = 0; i < len; i += BRRBlockSize) {
+			if (data[i] >= 0xD0) {
+				ret |= BRRDataIssue.LargeRange | BRRDataIssue.UndefinedBehavior;
+				break;
+			}
 		}
 
 		// make sure no other header has an end flag
-		len -= BrrBlockSize;
+		len -= BRRBlockSize;
 
-		for (int i = 0; i < len; i += BrrBlockSize) {
-			if ((data[i] & EndFlag) is EndFlag) {
-				ret |= BRRDataIssue.EarlyEndFlags;
+		for (int i = 0; i < len; i += BRRBlockSize) {
+			if ((data[i] & EndFlag) == EndFlag) {
+				ret |= BRRDataIssue.EarlyEndFlags | BRRDataIssue.UndefinedBehavior;
 				break;
 			}
 		}
@@ -671,27 +318,58 @@ public sealed class BRRSample {
 	}
 
 	/// <summary>
-	/// Performs a validity check on data for BRR compliance with acknowledgement of a loop point.
+	/// Validates this instance's data and metadata.
 	/// </summary>
-	/// <inheritdoc cref="ValidateBRR(byte[])" path="/returns"/>
-	private static BRRDataIssue ValidateBRRDataWithLoop(Span<byte> data, int loopPoint) {
-		BRRDataIssue ret = ValidateBRRDataBasic(data);
+	/// <inheritdoc cref="ValidateBRRData(byte[])" path="/returns"/>
+	public BRRDataIssue Validate() {
+		BRRDataIssue ret = ValidateBRRData(_data.AsSpan(), LoopPoint);
 
-		// give up if there are unresolvable issues
-		if (ret.HasFlag(BRRDataIssue.Unresolvable)) {
+		if (Length != _data.Length) {
+			ret |= BRRDataIssue.WrongBlockCount | BRRDataIssue.Unresolvable;
+		}
+
+		return ret;
+	}
+
+	/// <summary>
+	/// Tests the given sample data for BRR validity with consideration for a known loop point.
+	/// </summary>
+	/// <remarks>
+	/// If the loop point is unknown, use <see cref="ValidateBRRData(byte[])"/>.
+	/// </remarks>
+	/// <param name="data"><inheritdoc cref="ValidateBRRData(byte[])" path="/param[@name='data']"/></param>
+	/// <param name="loopPoint">The loop point of the sample; <c>-1</c> if no loop.</param>
+	/// <inheritdoc cref="ValidateBRRData(byte[])" path="/returns"/>
+	public static BRRDataIssue ValidateBRRData(byte[] data, int loopPoint) {
+		return ValidateBRRData(data.AsSpan(), loopPoint);
+	}
+
+	/// <inheritdoc cref="ValidateBRRData(byte[], int)" path="/summary"/>
+	/// <remarks>
+	/// If the loop point is unknown, use <see cref="ValidateBRRData(Span{byte})"/>.
+	/// </remarks>
+	/// <inheritdoc cref="ValidateBRRData(byte[], int)" path="/param"/>
+	/// <inheritdoc cref="ValidateBRRData(byte[])" path="/returns"/>
+	public static BRRDataIssue ValidateBRRData(Span<byte> data, int loopPoint) {
+		BRRDataIssue ret = ValidateBRRData(data);
+		
+		// don't bother with the loop point for bad data.
+		if (ret.HasFlag(BRRDataIssue.BadAlignment)
+			|| ret.HasFlag(BRRDataIssue.DataTooSmall)
+			|| ret.HasFlag(BRRDataIssue.DataTooLarge)) {
 			return ret;
 		}
 
 		// check for a loop flag from the final block
-		bool hasLoopFlag = (data[^BrrBlockSize] & LoopFlag) != LoopFlag;
+		bool hasLoopFlag = (data[^BRRBlockSize] & LoopFlag) == LoopFlag;
 
 		// Check if loop point is aligned to a multiple of 9
-		if ((loopPoint % BrrBlockSize) is not 0) {
+		if ((loopPoint % BRRBlockSize) is not 0) {
 			ret |= BRRDataIssue.MisalignedLoopPoint;
 
-			// Unresolvable if there's a loop
+			// undefined if there's a loop
 			if (hasLoopFlag) {
-				ret |= BRRDataIssue.Unresolvable;
+				ret |= BRRDataIssue.UndefinedBehavior;
 			}
 		}
 
@@ -699,62 +377,163 @@ public sealed class BRRSample {
 		if (loopPoint >= data.Length) {
 			ret |= BRRDataIssue.OutOfRangeLoopPoint;
 
-			// Unresolvable if there's a loop
 			if (hasLoopFlag) {
-				ret |= BRRDataIssue.Unresolvable;
+				ret |= BRRDataIssue.UndefinedBehavior;
+
+				if (loopPoint > 0xFFFF) {
+					ret |= BRRDataIssue.Unresolvable;
+				}
 			}
 		}
 
 		return ret;
-
 	}
 
-	/// <inheritdoc cref="GetChecksum(byte[])"/>
-	public static ushort GetChecksum(BRRSample brr) {
-		return GetChecksum(brr.Data);
-	}
+	// Shouting out IsoFrieze here, because how to best implement this didn't click until I rewatched the RGME video.
 
 	/// <summary>
-	/// Creates a BRR Suite Sample specification checksum for the given sample.
+	/// Decodes BRR data to PCM data by emulating the SNES DSP decoding process at a fixed pitch value.
 	/// </summary>
-	/// <param name="brr">The sample data to checksum.</param>
-	/// <returns>The checksum as a <see langword="ushort"/> value.</returns>
-	/// <exception cref="BRRConversionException">The file is malformed.</exception>
-	public static ushort GetChecksum(byte[] brr) {
-		int length = brr.Length;
-
-		if (length == 0) {
-			throw new BRRConversionException("Cannot checksum an empty set of samples.");
+	/// <remarks>
+	/// <para>
+	/// If the beginning of a sample decodes poorly, it is likely that it does not use filter 0
+	/// and/or 0 value samples at the beginning of the sample.
+	/// This method uses seeds the ADPCM sample history as a means of
+	/// emulating the undefined behavior for a newly keyed-on voice.
+	/// </para>
+	/// <para>
+	/// <u><b>DEV NOTE:</b></u> I am not 100% satisfied with the output of this decoder yet.
+	/// It is fairly accurate, but I believe it is missing a couple of details that push it away
+	/// from perfectly emulating the DSP.
+	/// It is good enough to roughly gauge the quality of a sample, but for now it is recommended
+	/// all samples be tested on actual console, emulator, or an spc player.
+	/// </para>
+	/// </remarks>
+	/// <param name="pitch">
+	///   <para>
+	///     The output frequency to emulate decoding at;
+	///     where 0x1000 is 32000 Hz with a 1:1 output,
+	///     and higher values result in higher frequencies.
+	///   </para>
+	///   <para>
+	///     Values outside the range [0x0001,0x3FFF] will fall back to 0x1000.
+	///   </para>
+	/// </param>
+	/// <param name="minimumLength">
+	///     The minimum length of the output audio in seconds.
+	///     Ignored on non-looping samples.
+	///     Don't ask for more than 10 seconds.
+	/// </param>
+	/// <returns>A <see cref="WaveContainer"/> containing the decoded samples to be played back at 32000 Hz.</returns>
+	public WaveContainer Decode(int pitch, decimal minimumLength) {
+		if (pitch is < 1 or > 0x3FFF) {
+			pitch = DefaultVxPitch;
 		}
 
-		if (length % BrrBlockSize != 0) {
-			throw new BRRConversionException($"Cannot checksum data whose length is not a multiple of {BrrBlockSize}.");
+		if (minimumLength < 0) {
+			minimumLength = 0;
+		} else if (minimumLength > 10) {
+			throw new ArgumentOutOfRangeException(nameof(minimumLength), $"{nameof(minimumLength)} must be a value between 0 and 10.");
 		}
 
-		// Step 1: Begin with a sum accumulator of 0
-		int ret = 0;
+		// get sample rate from vxp
+		int sampleRate = pitch * DSPFrequency;
+		sampleRate /= DefaultVxPitch;
 
-		// Step 2: For each block:
-		for (int i = 0; i < length; i += BrrBlockSize) {
-			// Step 2.1: Reset the block accumulator
-			int accum = 0;
+		// determine length of output based on loop parameters
+		int loopBlock = _loopblock;
 
-			// Step 2.2: Add the 8 bytes of the block, each shifted left by their index within the block minus 1
-			for (int j = 1; j < BrrBlockSize; j++) {
-				accum += brr[i + j] << (j - 1);
+		int loopCount = 0;
+
+		if (loopBlock >= _blockCount || loopBlock < 0) {
+			loopCount = 0;
+			loopBlock = 0;
+		} else {
+			int minSamples = (int) decimal.Ceiling(minimumLength * sampleRate / PCMBlockSize);
+			loopCount = Math.Max(loopCount, (minSamples - loopBlock) / (_blockCount - loopBlock));
+			loopCount = Math.Clamp(loopCount, 1, 777);
+		}
+
+		int loopPoint = loopBlock * PCMBlockSize;
+		int brrSampleSize = SampleCount;
+
+		int loopSize = _blockCount - loopBlock;
+
+		int blockCount = _blockCount + (loopSize * loopCount);
+		int sampleCount = blockCount * PCMBlockSize;
+
+		WaveContainer ret = new(DSPFrequency, PreferredBitDepth, sampleCount);
+
+		int decodePos = 0;
+		int pitchCounter = 0;
+
+		// "random" numbers; just something nonzero to emulate badness if not initialized to filter 0
+		int p1 = unchecked((short) 0xBEBE);
+		int p2 = 5656; // Awww man... now that's all I can think about!
+		int p3 = 0x4040;
+		int p4 = -0x7171;
+	
+		for (int i = 0; i < 4; i++) {
+			DecodeNextSample();
+		}
+	
+		for (int i = 0; i < sampleCount; i++) {
+			// next sample output
+			int gaussX = (pitchCounter >> 4) & 0xFF;
+			int wv;
+			wv  = (SuiteUtility.SuiteGaussTable[0x0FF - gaussX] * p4) >> 10;
+			wv += (SuiteUtility.SuiteGaussTable[0x1FF - gaussX] * p3) >> 10;
+			wv += (SuiteUtility.SuiteGaussTable[0x100 + gaussX] * p2) >> 10;
+			wv += (SuiteUtility.SuiteGaussTable[0x000 + gaussX] * p1) >> 10;
+			wv >>= 1;
+			wv = Conversion.Clip(wv);
+			ret[i] = (short) wv;
+	
+			pitchCounter += pitch;
+	
+			while (pitchCounter >= 0x1000) {
+				DecodeNextSample();
+				pitchCounter -= 0x1000;
 			}
-
-			// Step 2.3: Shift the header byte 4 bits left
-			int hbs = brr[i] << 4;
-
-			// Step 2.4: Exclusive OR the shifted header with the block accumulator
-			accum ^= hbs;
-
-			// Step 2.5: Add the block accumulator to the sum accumulator
-			ret += accum;
 		}
-
-		// Step 3: Truncate the sum accumulator to 16-bits and return.
-		return (ushort) ret;
+	
+		void DecodeNextSample() {
+			BRRBlock brb = new(ref _data[(decodePos >> 4) * BRRBlockSize]);
+	
+			int p5 = Conversion.ApplyRange(brb[decodePos & 0xF], brb.Range);
+			p5 += Conversion.GetPrediction(brb.Filter, p1, p2);
+	
+			p4 = p3;
+			p3 = p2;
+			p2 = p1;
+			p1 = p5;
+	
+			decodePos++;
+	
+			if (decodePos == brrSampleSize) {
+				decodePos = loopPoint;
+			}
+		}
+	
+		return ret;
 	}
+
+	/// <inheritdoc cref="Decode(int, decimal)"/>
+	/// <remarks>
+	/// Uses a minimum length of <c>1.0</c>.
+	/// </remarks>
+	public WaveContainer Decode(int pitch) => Decode(pitch: pitch, minimumLength: 1.0M);
+
+	/// <inheritdoc cref="Decode(int, decimal)"/>
+	/// <remarks>
+	/// Uses a VxPitch of <c>0x1000</c>.
+	/// </remarks>
+	public WaveContainer Decode(decimal minimumLength) => Decode(pitch: DefaultVxPitch, minimumLength: minimumLength);
+
+	/// <inheritdoc cref="Decode(int, decimal)"/>
+	/// <remarks>
+	/// Uses a VxPitch of <c>0x1000</c> and a minimum length of <c>1.0</c>.
+	/// </remarks>
+	public WaveContainer Decode() => Decode(pitch: DefaultVxPitch, minimumLength: 1.0M);
+
 }

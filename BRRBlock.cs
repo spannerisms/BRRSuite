@@ -1,152 +1,122 @@
-﻿using System.Runtime.CompilerServices;
+﻿// BRR Suite is licensed under the MIT license.
+
+using System.Runtime.CompilerServices;
 
 namespace BRRSuite;
 
 /// <summary>
-/// Provides a by-reference wrapper for one block of BRR data with nibble-level access methods.
+/// Provides a by-reference wrapper for one BRR block with granular data access.
 /// </summary>
 public readonly ref struct BRRBlock {
 	// managed pointer to header
 	private readonly ref byte _header;
 
 	// DUMB (EPIC) HACK
-	// ulong is 8 bytes in size, or 16 nibbles
+	// long is 8 bytes in size, or 16 nibbles
 	// this can give us fast manipulation of the 4-bit samples without any unsafe pointer or indexing nonsense
-	private readonly ref ulong _samples;
+	// using long because it facilitates sign extension for reading
+	private readonly ref long _samples;
 
 	/// <summary>
 	/// <u><b>Do not use this constructor.</b></u> Always throws <see cref="InvalidOperationException"/>.
 	/// </summary>
+	[Obsolete("The default constructor BRRBlock() should not be used. Use the instance method BRRSample.GetBlock(int).", error: true)]
 	public BRRBlock() {
 		throw new InvalidOperationException();
 	}
 
-	/// <summary>
-	/// Privileged faster and direct access for <see cref="BRRSample.GetBlock(int)"/>.
+	/// <remarks>
+	/// Fast and direct access for <see cref="BRRSample.GetBlock(int)"/>.
 	/// Skips error checking because it assumes the caller already did it.
-	/// </summary>
+	/// </remarks>
 	internal BRRBlock(ref byte headerByte) {
 		_header = ref headerByte; // reference to header byte
-		_samples = ref Unsafe.AddByteOffset(ref Unsafe.As<byte, ulong>(ref _header), 1); // recast as long, +1 byte to skip over header
+		_samples = ref Unsafe.AddByteOffset(ref Unsafe.As<byte, long>(ref _header), 1); // recast as long, +1 byte to skip over header
 	}
 
 	/// <summary>
-	/// Creates a new wrapper from the specified span.
-	/// The input span must be 9 bytes in length.
+	/// Necessary correction for endianness of the machine.
 	/// </summary>
-	/// <param name="block">A span over 9 bytes of data to use for this block.</param>
-	/// <exception cref="ArgumentException">If <paramref name="block"/> is not 9 bytes.</exception>
-	public BRRBlock(Span<byte> block) {
-		if (block.Length is not BrrBlockSize) {
-			throw new ArgumentException($"The input span must have a length of {BrrBlockSize}.");
-		}
-
-		_header = ref block[0]; // reference to header byte
-		_samples = ref Unsafe.AddByteOffset(ref Unsafe.As<byte, ulong>(ref _header), 1); // recast as long, +1 byte to skip over header
-	}
-
-	/// <summary>
-	/// Creates a new wrapper from a byte array, indexed to the specified block.
-	/// </summary>
-	/// <param name="sample">The sample to capture a block from.</param>
-	/// <param name="block">The block to capture.</param>
-	/// <exception cref="ArgumentException"></exception>
-	/// <exception cref="ArgumentOutOfRangeException"></exception>
-	/// <exception cref="NullReferenceException">If <paramref name="sample"/> is null.</exception>
-	public BRRBlock(byte[] sample, int block) {
-		// No need to check for sample being null
-		// It will throw from trying to access .Length
-		if ((sample.Length % BrrBlockSize) is not 0) {
-			throw new ArgumentException($"The input array must have a length that is a multiple of {BrrBlockSize}.");
-		}
-
-		if (block < 0) {
-			throw new ArgumentOutOfRangeException(nameof(block), $"{nameof(block)} should not be negative.");
-		}
-
-		block *= BrrBlockSize;
-
-		if (block > (sample.Length - BrrBlockSize + 1)) {
-			throw new ArgumentOutOfRangeException(nameof(block));
-		}
-
-		_header = ref sample[block]; // reference to header byte
-		_samples = ref Unsafe.AddByteOffset(ref Unsafe.As<byte, ulong>(ref _header), 1); // recast as long, +1 byte to skip over header
-	}
-
-	/// <summary>
-	/// <para>
-	///     Provides a necessary correction depending on the endianness of the machine.
-	/// </para>
+	/// <remarks>
 	/// <para>
 	///     For little-endian machines, each byte is still big-endian,
 	///     with the high nibble holding the earlier sample.
 	///     To account for that, we just need to flip the parity of the index with <c>i^0x1</c>.
 	/// </para>
-	///     For big-endian machines, the whole thing is big-endian.
-	///     We need <c>i</c> to become <c>15-i</c>, but that's equivalent to <c>i^0xF</c> for our use case.
 	/// <para>
+	///     For big-endian machines, the whole thing is big-endian.
+	///     We need <c>i</c> to become <c>15-i</c>, which is equivalent to <c>i^0xF</c> for our use case.
 	/// </para>
-	/// </summary>
+	/// </remarks>
 	private static readonly int IndexCorrection = BitConverter.IsLittleEndian ? 0b0001 : 0b1111;
 
 	/// <summary>
-	/// Provides 4-bit access to any of the 16 samples encoded in this block.
+	/// Necessary correction for endianness of the machine.
 	/// </summary>
-	/// <param name="i">The sample ([0,15]) to set.</param>
+	/// <remarks>
+	/// <para>
+	///     For little-endian machines, each byte is already big-endian,
+	///     so no need to flip parity.
+	/// </para>
+	/// <para>
+	///     For big-endian machines, no correction is needed.
+	/// </para>
+	/// </remarks>
+	private static readonly int IndexCorrectionRead = BitConverter.IsLittleEndian ? 0b1111 : 0b0000;
+
+	/// <summary>
+	/// Provides signed 4-bit access to any of the 16 samples encoded in this block.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// When getting samples, the return value will be sign extended from bit 3.
+	/// </para>
+	/// <para>
+	/// When setting samples, the input value is masked to the lowest 4 bits.
+	/// </para>
+	/// </remarks>
+	/// <param name="sample">The sample ([0,15]) to access.</param>
 	/// <exception cref="ArgumentOutOfRangeException"></exception>
-	public readonly byte this[int i] {
+	public readonly int this[int sample] {
 		get {
 			// if any bit besides the bottom 4 is set, we're not in bounds
 			// so just get rid of those bits and check for 0
-			if ((i >> 4) != 0) { // very fast bounds checking
+			if ((sample >> 4) != 0) { // very fast bounds checking
 				throw new ArgumentOutOfRangeException();
 			}
 
-			i ^= IndexCorrection;
-			i *= 4; // make it nibbles
+			sample ^= IndexCorrectionRead;
+			sample *= 4; // make it nibbles
 
-			ulong ret = _samples >> i;
-			return (byte) (ret & 0xF);
+			// shift left to put value in the highest nibble for free sign extension
+			long ret = _samples << sample;
+
+			// shift to lowest nibble
+			return (int) (ret >> 60);
 		}
 
 		set {
-			if ((i >> 4) != 0) { // very fast bounds checking
+			if ((sample >> 4) != 0) { // very fast bounds checking
 				throw new ArgumentOutOfRangeException();
 			}
 
-			i ^= IndexCorrection;
-			i *= 4; // make it nibbles
+			sample ^= IndexCorrection;
+			sample *= 4; // make it nibbles
 
-			_samples &= ~(0xFUL << i); // create a mask to remove the nibble
-			_samples |= (value & 0xFUL) << i; // mask the value to 4 bits and shift into place
+			_samples &= ~(0xFL << sample); // create a mask to remove the nibble
+			_samples |= (value & 0xFL) << sample; // mask the value to 4 bits and shift into place
 		}
 	}
 
 	/// <summary>
-	/// Gets or sets the header byte of the block.
+	/// Gets a reference to the header byte of this block.
 	/// </summary>
-	public readonly byte Header {
-		get => _header;
-		set => _header = value;
+	public readonly ref byte Header {
+		get => ref _header;
 	}
 
 	/// <summary>
-	/// Gets or sets the filter specified by the header byte.
-	/// </summary>
-	public readonly int Filter {
-		get => (_header & FilterMask) >> FilterShift;
-		set {
-			value <<= FilterShift;
-			value &= FilterMask;
-
-			_header &= FilterMaskOff;
-			_header |= (byte) value;
-		}
-	}
-
-	/// <summary>
-	/// Gets or sets the range specified by the header byte.
+	/// Gets or sets the range field in the header byte.
 	/// </summary>
 	public readonly int Range {
 		get => (_header & RangeMask) >> RangeShift;
@@ -160,7 +130,21 @@ public readonly ref struct BRRBlock {
 	}
 
 	/// <summary>
-	/// Gets or sets the loop flag in the header byte.
+	/// Gets or sets the filter field in the header byte.
+	/// </summary>
+	public readonly int Filter {
+		get => (_header & FilterMask) >> FilterShift;
+		set {
+			value <<= FilterShift;
+			value &= FilterMask;
+
+			_header &= FilterMaskOff;
+			_header |= (byte) value;
+		}
+	}
+
+	/// <summary>
+	/// Gets or sets the loop flag field in the header byte.
 	/// </summary>
 	public readonly bool Loop {
 		get => (_header & LoopFlag) != 0;
@@ -174,7 +158,7 @@ public readonly ref struct BRRBlock {
 	}
 
 	/// <summary>
-	/// Gets or sets the end flag in the header byte.
+	/// Gets or sets the end flag field in the header byte.
 	/// </summary>
 	public readonly bool End {
 		get => (_header & EndFlag) != 0;

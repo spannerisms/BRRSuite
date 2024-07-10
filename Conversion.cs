@@ -1,47 +1,146 @@
-﻿namespace BRRSuite;
+﻿// BRR Suite is licensed under the MIT license.
+
+namespace BRRSuite;
 
 /// <summary>
-/// Encapsulates a method for finding the optimal parameters to encoding a set of samples to BRR.
-/// </summary>
-/// <param name="samples">The samples of the waveform to encode.</param>
-/// <param name="loopBlock">Starting point of loop in BRR blocks.</param>
-/// <returns>A new <see cref="BRRSample"/> object containing the data of the converted sample.</returns>
-public delegate BRRSample EncodingAlgorithm(int[] samples, int loopBlock);
-
-/// <summary>
-/// Encapsulates one of the four sampling filters used by the BRR format.
-/// </summary>
-/// <param name="p1">Amplitude of the sample 1 backwards.</param>
-/// <param name="p2">Amplitude of the sample 2 backwards.</param>
-/// <returns>The amplitude of the next sample.</returns>
-public delegate int PredictionFilter(int p1, int p2);
-
-/// <summary>
-/// Provides methods for encoding and decoding BRR sample files to and from Wave Sound files.
+/// Provides constants and methods for encoding and decoding BRR sample files to and from Wave Sound files.
 /// </summary>
 public static class Conversion {
+	//*****************************************************************************
+	// Audio conversion
+	//*****************************************************************************
+
 	/// <summary>
-	/// The original BRRtools brute force algorithm with silent start enabled, and no disabled filters.
-	/// Disable wrapping is not an option in BRR Suite.
+	/// The number of bytes contained in a single block of BRR data.
 	/// </summary>
-	public static readonly EncodingAlgorithm BruteForce = GetBRRtoolsBruteForce(true, false, false, false, false);
+	public const int BRRBlockSize = 9;
+
+	/// <summary>
+	/// The number of audio samples represented by a single BRR block.
+	/// </summary>
+	public const int PCMBlockSize = 16;
+
+	/// <summary>
+	/// The preferred bit-depth of a PCM file when converting to BRR.
+	/// </summary>
+	public const int PreferredBitDepth = 16;
+
+	/// <summary>
+	/// The sample rate of the SNES DSP.
+	/// </summary>
+	public const int DSPFrequency = 32000;
+
+	/// <summary>
+	/// The default value of VxPITCH that plays back at 32000 Hz.
+	/// </summary>
+	public const int DefaultVxPitch = 0x1000;
+
+	//*****************************************************************************
+	// BRR block header
+	//*****************************************************************************
+
+	/// <summary>
+	/// A bitmask for block headers to isolate the range (sample shift).
+	/// </summary>
+	public const byte RangeMask = 0b1111_0000;
+
+	/// <summary>
+	/// A bitmask for block headers to remove the range (sample shift).
+	/// </summary>
+	public const byte RangeMaskOff = unchecked((byte) ~RangeMask);
+
+	/// <summary>
+	/// The number of shifts needed to normalize or position the range field.
+	/// </summary>
+	public const int RangeShift = 4;
+
+	/// <summary>
+	/// The maximum range that doesn't lead to unwanted behavior. Inclusive.
+	/// </summary>
+	public const int MaximumRange = 12;
+
+	/// <summary>
+	/// A bitmask for block headers to isolate the filter ID.
+	/// </summary>
+	public const byte FilterMask = 0b0000_1100;
+
+	/// <summary>
+	/// A bitmask for block headers to remove the filter.
+	/// </summary>
+	public const byte FilterMaskOff = unchecked((byte) ~FilterMask);
+
+	/// <summary>
+	/// The number of shifts needed to normalize or position the filter ID field.
+	/// </summary>
+	public const int FilterShift = 2;
+
+	/// <summary>
+	/// The bit indicating a sample is to loop.
+	/// </summary>
+	public const byte LoopFlag = 0b0000_0010;
+
+	/// <summary>
+	/// A mask that can be used to reset the loop flag.
+	/// </summary>
+	public const byte LoopFlagOff = unchecked((byte) ~LoopFlag);
+
+	/// <summary>
+	/// The value used to indicate a sample has no loop point.
+	/// </summary>
+	public const int NoLoop = -1;
+
+	/// <summary>
+	/// The bit marking the last block of a sample.
+	/// </summary>
+	public const byte EndFlag = 0b0000_0001;
+
+	/// <summary>
+	/// A mask that can be used to reset the end flag.
+	/// </summary>
+	public const byte EndFlagOff = unchecked((byte) ~EndFlag);
+
+	//*****************************************************************************
+	// Utility methods
+	//*****************************************************************************
+
+	/// <summary>
+	/// Gets an encoder that contains the current best algorithm with the best settings.
+	/// </summary>
+	/// <remarks>
+	/// <u><b>NOTE:</b></u> this is subject to change as the library evolves.
+	/// </remarks>
+	/// <returns>A new <see cref="BRREncoder"/> instance preconfigured to its recommended settings.</returns>
+	public static BRREncoder GetRecommendedEncoder() {
+		return new BRRtoolsEncoder() {
+			Resampler = ResamplingAlgorithms.BandlimitedInterpolation,
+			Filters = PreEncodingFilters.NoFilter,
+			EnableFilter0 = true,
+			EnableFilter1 = true,
+			EnableFilter2 = true,
+			EnableFilter3 = true,
+			LeadingZeros = 3,
+			ResampleFactor = 1.0M,
+			Truncate = -1,
+		};
+	}
 
 	// a = 0
 	// b = 0
 	private static int PredictionFilter0(int p1, int p2) => 0;
 
+	// formula from fullsnes.txt
 	// a = 0.9375    (15/16)
 	// b = 0
 	private static int PredictionFilter1(int p1, int p2) => p1 - (p1 >> 4);
 
+	// formula from fullsnes.txt
 	// a =  1.90625  (61/32)
 	// b = -0.9375   (-15/16)
-	// formula from fullsnes.txt
 	private static int PredictionFilter2(int p1, int p2) => p1 * 2 + ((p1 * -3) >> 5) - p2 + (p2 >> 4);
 
+	// formula from fullsnes.txt
 	// a =  1.796875 (115/64)
 	// b = -0.8125   (-13/16)
-	// formula from fullsnes.txt
 	private static int PredictionFilter3(int p1, int p2) => p1 * 2 + ((p1 * -13) >> 6) - p2 + ((p2 * 3) >> 4);
 
 	// pre-init these for faster return
@@ -54,7 +153,7 @@ public static class Conversion {
 	/// Returns a <see cref="PredictionFilter"/> delegate encapsulating a filter.
 	/// </summary>
 	/// <param name="filter">The ID of the filter to use.</param>
-	/// <exception cref="ArgumentOutOfRangeException">The input value cannot be interpreted as a filter</exception>
+	/// <exception cref="ArgumentOutOfRangeException">The requested filter ID is not 0–3.</exception>
 	public static PredictionFilter GetPredictionFilter(int filter) => filter switch {
 		0x00 => pf0,
 		0x01 => pf1,
@@ -65,12 +164,29 @@ public static class Conversion {
 	};
 
 	/// <summary>
+	/// Returns the result of a prediction filter with the specified samples.
+	/// </summary>
+	/// <param name="filter"><inheritdoc cref="GetPredictionFilter(int)" path="/param[@name='filter']"/></param>
+	/// <param name="p1"><inheritdoc cref="PredictionFilter" path="/param[@name='p1']"/></param>
+	/// <param name="p2"><inheritdoc cref="PredictionFilter" path="/param[@name='p2']"/></param>
+	/// <returns>The prediction from the filter.</returns>
+	/// <inheritdoc cref="GetPredictionFilter(int)" path="/exception"/>
+	public static int GetPrediction(int filter, int p1, int p2) => filter switch {
+		0x00 => 0,
+		0x01 => p1 - (p1 >> 4),
+		0x02 => p1 * 2 + ((p1 * -3) >> 5) - p2 + (p2 >> 4),
+		0x03 => p1 * 2 + ((p1 * -13) >> 6) - p2 + ((p2 * 3) >> 4),
+
+		_ => throw new ArgumentOutOfRangeException($"Not a valid filter: 0x{filter:X2}", nameof(filter))
+	};
+
+	/// <summary>
 	/// Clamps a signed value to 15 bits.
 	/// </summary>
 	/// <param name="v">The value to clamp.</param>
-	/// <returns>A new 15-bit value, sign extended into bits 15 through 24.</returns>
+	/// <returns>A new 15-bit value, sign extended into bits 15 through 31.</returns>
 	public static int Clamp(int v) {
-		if ((short) v != v) {
+		if ((short) v != v) { // stolen from bsnes/blargg
 			v >>= 31;
 			v ^= 0x7FFF;
 		}
@@ -85,38 +201,59 @@ public static class Conversion {
 	/// <inheritdoc cref="Clamp(int)" path="/returns"/>
 	public static int Clip(int v) => v switch {
 		>  0x7FFF    => (v + 0x7FFF) & 0x7FFF,
-//		< -0x8000    => 0,          // clipped to 0 - TODO i think this covers the hardware better than -0x8000?
-		< -0x7FFF    => 0,          // clipped to 0
+//		< -0x8000    => 0,          // clipped to 0
+		< -0x7FFF    => 0,          // clipped to 0 - TODO i think this covers the hardware better than -0x8000?
 		>  0x3FFF    => v - 0x8000, // [4000,7FFF] => [-4000,-1]
 		< -0x4000    => v + 0x8000, // [-8000,-4001] => [0,-3FFF]
 		_            => v,
 	};
 
 	/// <summary>
-	/// Returns the number of 16-sample blocks required to encode a given set of samples.
+	/// Applies the range shift, with undefined range behavior emulated.
 	/// </summary>
-	/// <typeparam name="T">A type that can be used to represent a signed number.</typeparam>
-	/// <param name="samples">An array of samples.</param>
-	public static int GetBlockCount<T>(T[] samples) where T : System.Numerics.ISignedNumber<T> {
-		return (samples.Length + 15) / PcmBlockSize; // +15 to round up
-	}
-
-	/// <inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="//summary|//exception"/>
-	/// <param name="pcmBlock"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='pcmBlock']"/></param>
-	/// <param name="brrBlock">
-	///     A span of length 9 over the BRR block that data should be written to.
-	///     See also: <seealso cref="BRRSample.GetBlockSpan(int)"/>.
+	/// <param name="sample">The 4-bit sample, sign-extended to 32-bits.</param>
+	/// <param name="range">
+	///     The number of shifts performed on the 4-bit value of the encoded sample. <c>[0,12]</c><br/>
+	///     All other ranges will be treated exactly the same.
+	///     Where negative values are maxed out, and positive values are clamped to zero.
 	/// </param>
-	/// <param name="range"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='range']"/></param>
-	/// <param name="filter"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='filter']"/></param>
-	/// <param name="p1"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p1']"/></param>
-	/// <param name="p2"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p2']"/></param>
-	public static void EncodeBlock(Span<int> pcmBlock, Span<byte> brrBlock, int range, int filter, ref int p1, ref int p2) {
-		if (brrBlock.Length is not BrrBlockSize) {
-			throw new ArgumentException("The length of the output block must be 9 bytes.", nameof(brrBlock));
+	/// <returns>The value of the shifted sample.</returns>
+	public static int ApplyRange(int sample, int range) {
+		if (range is < 0 or > MaximumRange) {
+			sample >>= 31;
+			sample <<= 11;
+			return sample;
 		}
 
-		EncodeBlock(pcmBlock, new BRRBlock(brrBlock), range, filter, ref p1, ref p2);
+		sample <<= range;
+		return sample >> 1;
+	}
+
+	/// <summary>
+	/// Treats a value as a signed, 4-bit number and sign-extends bit 3.
+	/// </summary>
+	/// <param name="s">The 4-bit number to sign extend.</param>
+	/// <returns>A new value with bit 3 copied into all higher-order bits.</returns>
+	public static int SignExtend4Bit(int s) {
+		s <<= 28;
+		s >>= 28;
+		return s;
+	}
+
+	/// <inheritdoc cref="SignExtend4Bit(int)"/>
+	public static short SignExtend4Bit(short s) {
+		s <<= 12;
+		s >>= 12;
+		return s;
+	}
+
+	/// <summary>
+	/// Gets the number of 16-sample blocks required to cover a given length.
+	/// </summary>
+	/// <param name="length">The length of the data to size for.</param>
+	/// <returns>A block count, rounded up to the nearest multiple of 16.</returns>
+	public static int GetBlockCount(int length) {
+		return (length + 15) / PCMBlockSize; // +15 to round up
 	}
 
 	/// <summary>
@@ -129,21 +266,22 @@ public static class Conversion {
 	/// </para>
 	/// <para>
 	///     This method is designed to be chained with itself by using the <see langword="ref"/> parameters
-	///     to communicate samples from one block to the next, where:<br />
-	///     • <paramref name="p1"/> is the previous sample<br/>
-	///     • <paramref name="p2"/> is the sample preceding <paramref name="p1"/><br/>
+	///     to pass samples from one call to the next, where:<br />
+	///     • <paramref name="p1"/> is the 15-bit previous sample<br/>
+	///     • <paramref name="p2"/> is the 15-bit sample preceding <paramref name="p1"/><br/>
 	///     These previous samples should generally be initialized to 0 at the start of conversion.
 	/// </para>
 	/// </summary>
 	/// <param name="pcmBlock">
-	///     A span of length 16 over the waveform block to encode.
-	///     See also: <seealso cref="WaveContainer.GetBlockAt(int[], int)"/>.
+	///     A reference to the 16 PCM samples to encode.
 	/// </param>
 	/// <param name="brrBlock">
 	///     A <see cref="BRRBlock"/> ref struct over the given block to encode.
 	///     See also: <seealso cref="BRRSample.GetBlock(int)"/>.
 	/// </param>
-	/// <param name="range">The number of shifts performed on the 4-bit value of the encoded sample. <c>[0,12]</c></param>
+	/// <param name="range">
+	///     <inheritdoc cref="ApplyRange(int, int)" path="/param[@name='range']"/>
+	/// </param>
 	/// <param name="filter">The ID of the filter to encode with. <c>[0,1,2,3]</c></param>
 	/// <param name="p1">
 	///     A reference to the 15-bit value of the most-recently encoded sample.
@@ -155,24 +293,17 @@ public static class Conversion {
 	/// </param>
 	/// <exception cref="ArgumentException"></exception>
 	/// <exception cref="ArgumentOutOfRangeException"></exception>
-	public static void EncodeBlock(Span<int> pcmBlock, BRRBlock brrBlock, int range, int filter, ref int p1, ref int p2) {
-		if (pcmBlock.Length is not PcmBlockSize) {
-			throw new ArgumentException("The length of the input block must be 16 PCM samples.", nameof(pcmBlock));
-		}
-
-		if (range is < 0 or > 12) {
-			throw new ArgumentOutOfRangeException("Range must be between 0 and 12, inclusive.", nameof(range));
+	public static void EncodeBlock(PCMBlock pcmBlock, BRRBlock brrBlock, int range, int filter, ref int p1, ref int p2) {
+		if (range is < 0 or > MaximumRange) {
+			throw new ArgumentOutOfRangeException($"Range must be between 0 and {MaximumRange}, inclusive.", nameof(range));
 		}
 
 		if (filter is < 0 or > 3) {
 			throw new ArgumentOutOfRangeException("Filter must be between 0 and 3, inclusive.", nameof(filter));
 		}
 
-		// actual algorithm
-		int brrX = 0;
-
-		foreach (var sample in pcmBlock) {
-			brrBlock[brrX++] |= EncodeSample(sample, out int _, range, filter, ref p1, ref p2);
+		for (int i = 0; i < PCMBlockSize; i++) {
+			brrBlock[i] = EncodeSample(pcmBlock[i], range, filter, ref p1, ref p2);
 		}
 
 		// write header
@@ -180,68 +311,52 @@ public static class Conversion {
 		brrBlock.Filter = filter;
 	}
 
+
 	/// <summary>
 	/// Encodes a signed 16-bit sample to a signed 4-bit value for a given set of block parameters.
-	/// This method uses <see langword="ref"/> parameters to handle the filter history.
+	/// The returned value will be the one which mostly closely matches the input sample.
 	/// </summary>
+	/// <remarks>
+	/// Take care to note that <paramref name="sample"/> is a signed, 16-bit number,
+	/// while <paramref name="p1"/> and <paramref name="p2"/> are signed, 15-bit numbers.
+	/// </remarks>
 	/// <param name="sample">The signed 16-bit sample to encode.</param>
-	/// <param name="error">When this method returns, this will contain the delta between the original sample and its encoded value.</param>
 	/// <param name="range">
-	///     <inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='range']"/><br/>
-	///     <u><b>Caution:</b></u> this method does not include special casing or error checking for invalid range values.
-	///     The caller of this routine should ensure that only valid ranges are passed to this method before calling.
+	///     <inheritdoc cref="ApplyRange(int, int)" path="/param[@name='range']"/>
 	/// </param>
-	/// <param name="filter"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='filter']"/></param>
-	/// <param name="p1"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p1']"/></param>
-	/// <param name="p2"><inheritdoc cref="EncodeBlock(Span{int}, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p2']"/></param>
-	/// <returns>The signed 4-bit value this sample should be encoded as, given the input parameters.</returns>
-	/// <exception cref="ArgumentOutOfRangeException"></exception>
-	public static byte EncodeSample(int sample, out int error, int range, int filter, ref int p1, ref int p2) {
-		// this method is an implementation of encoding for the formula:
-		//         s(n) = d * 2^(r-15) + a*s(n-1) + b*s(n-2)
-		//     where:
-		//         s(n) indicates the n-th sample of the BRR
-		//         d is the 4-bit, two's complement value encoded into the BRR (this is the value returned by this method)
-		//         v = d * 2^(r-15) is sample addend
-		//         r is the range (or shift) of the block
-		//         a and b are constant coefficients determined by the filter:
-		//             filter      a         b
-		//                  0      0         0
-		//                  1    15/16       0
-		//                  2    61/32    -15/16
-		//                  3   115/64    -13/16
-		//         a*s(n-1) + b*s(n-2) together constitute the "filter addend"
+	/// <param name="filter"><inheritdoc cref="EncodeBlock(PCMBlock, BRRBlock, int, int, ref int, ref int)" path="/param[@name='filter']"/></param>
+	/// <param name="p1"><inheritdoc cref="EncodeBlock(PCMBlock, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p1']"/></param>
+	/// <param name="p2"><inheritdoc cref="EncodeBlock(PCMBlock, BRRBlock, int, int, ref int, ref int)" path="/param[@name='p2']"/></param>
+	/// <returns>The signed 4-bit value this sample should be encoded as, given the input parameters with bit 3 sign-extended.</returns>
+	/// <exception cref="ArgumentOutOfRangeException">A bad filter ID is passed.</exception>
+	public static int EncodeSample(int sample, int range, int filter, ref int p1, ref int p2) {
+		// return / scratch variable
+		int ret;
 
 		// Get the filter addend from the previous two samples
-		// inlined here for speed
-		int linearValue = filter switch {
-			0 => 0,
-			1 => p1 - (p1 >> 4),
-			2 => p1 * 2 + ((p1 * -3) >> 5) - p2 + (p2 >> 4),
-			3 => p1 * 2 + ((p1 * -13) >> 6) - p2 + ((p2 * 3) >> 4),
-			_ => throw new ArgumentOutOfRangeException("Filter should be between 0 and 3, inclusive.", nameof(filter))
-		};
+		int linearValue = GetPrediction(filter, p1, p2);
 
-		// get the difference between the sample (shifted right to normalize to 15-bit) and the filter addend
-		error = (sample >> 1) - linearValue;
-
-		// some magic stuff I still don't understand
-		error = Clip(error) + (1 << (range + 2)) + ((1 << range) >> 2);
-
-		// default to the lowest value
-		int ret = 0x8; // signed 4 bit, so this is -8, but without sign extension
-
-		if (error > 0) {
-			ret = (error << 1) >> range;
-
-			// keep the value in range
-			if (ret > 0xF) {
-				ret = 0xF;
+		if (range is < 0 or MaximumRange) {
+			ret = sample >> 31;
+			range = MaximumRange;
+		} else { // valid ranges
+			// get the difference between the sample (shifted right to normalize to 15-bit) and the filter addend
+			ret = (sample >> 1) - linearValue;
+			
+			// find the ratio between the remaining difference and the range base
+			double rat = (double) ret / (1 << range);
+			
+			// round to nearest integer
+			ret = (int) (rat + 32.5D);
+			
+			ret -= 32;
+			
+			// bound to correct range
+			if (ret < -8) {
+				ret = -8;
+			} else if (ret > 7) {
+				ret = 7;
 			}
-
-			// change the domain of ret from [0,15] to [-8,7]
-			ret ^= 8; // same as ret -= 8, but without a sign extension into bits 4 through 31
-					  // this avoids an extra & 0xF
 		}
 
 		// what was the previous sample is now the next previous sample
@@ -250,475 +365,35 @@ public static class Conversion {
 		// the previous sample is now what we just encoded
 		p1 = Clip(linearValue + ((ret << range) >> 1)); // TODO should this be clip or clamp?
 
-		// calculate the error of this sample (normalizing p1 to 16-bit)
-		error = sample - (p1 << 1);
-
-		// return the 4-bit encoded value
-		return (byte) ret;
-	}
-
-	/// <summary>
-	/// Encodes a Wave Sound audio file to a BRR file with the given settings.
-	/// </summary>
-	/// <param name="wavSamples">Input PCM samples.</param>
-	/// <param name="encoder">An encoding algorithm that converts a raw waveform to a BRR sample.</param>
-	/// <param name="resampler">A <see cref="ResamplingAlgorithm"/> that will convert the input wav to a resampled output</param>
-	/// <param name="resampleFactor">Desired resampling ratio.</param>
-	/// <param name="truncate">Point at which input wave will be truncated; if 0 or negative, the input is not truncated.</param>
-	/// <param name="loopStart">Starting point of loop in samples</param>
-	/// <param name="trimLeadingZeros">Enables the encoder to remove leading zeros before adding an initial block</param>
-	/// <param name="waveFilters">An array of filters to apply to the sample data after it is resized and resampled.</param>
-	/// <returns>A new <see cref="BRRSample"/> object containing the data and metadata of the converted sample.</returns>
-	/// <exception cref="BRRConversionException"></exception>
-	public static BRRSample Encode(int[] wavSamples, EncodingAlgorithm encoder, ResamplingAlgorithm resampler, decimal resampleFactor,
-		int truncate = -1, int loopStart = NoLoop, bool trimLeadingZeros = false, PreEncodingFilter[]? waveFilters = null) {
-
-		int samplesLength = wavSamples.Length;
-
-		if (truncate < 1 || truncate > samplesLength) {
-			truncate = samplesLength;
-		} else {
-			samplesLength = truncate;
-		}
-
-		bool hasLoop = true;
-
-		if (loopStart < 0 || loopStart >= truncate) {
-			hasLoop = false;
-			loopStart = truncate;
-		}
-
-		// Output buffer
-		int targetLength;
-		int loopSize = 0;
-
-		if (!hasLoop) {
-			targetLength = (int) Math.Round(samplesLength / resampleFactor);
-		} else {
-			decimal oldLoopSize = (samplesLength - loopStart) / resampleFactor;
-
-			// New loopsize is the multiple of 16 that comes after loopsize
-			loopSize = (int) (Math.Ceiling(oldLoopSize / PcmBlockSize) * PcmBlockSize);
-
-			// Adjust resampling
-			targetLength = (int) Math.Round(samplesLength / resampleFactor * (loopSize / oldLoopSize));
-		}
-
-		decimal bsResampleRatio = (decimal) samplesLength / targetLength;
-
-		int[] samples = resampler(wavSamples, samplesLength, targetLength);
-
-		// Apply any filters to the sample now
-		if (waveFilters is not null) {
-			Array.ForEach(waveFilters, filt => {
-				if (filt is null) return;
-
-				samples = filt(samples);
-
-				if (samples.Length != targetLength) {
-					throw new BRRConversionException("Something is wrong with a filter that changed the size of the sample data.");
-				}
-			});
-		}
-
-		if (trimLeadingZeros) {
-			int fzero = Array.FindIndex(samples, i => i is not 0);
-			// if you get -1, wtf happened to your sample?
-			if (fzero is > 0) {
-				samples = samples[fzero..];
-			}
-		}
-
-		samplesLength = samples.Length;
-
-		if ((samplesLength % PcmBlockSize) is not 0) {
-			int padding = PcmBlockSize - (samplesLength & 0xF);
-
-			int[] padSamples = new int[samplesLength + padding];
-			samples.CopyTo(padSamples, padding);
-			samples = padSamples;
-			samplesLength += padding;
-		}
-
-		int loopBlock = hasLoop switch {
-			true => (samplesLength - loopSize) / PcmBlockSize,
-			false => NoLoop
-		};
-
-		BRRSample ret = encoder(samples, loopBlock);
-
-		ret.ResampleRatio = resampleFactor;
-
+		// return the encoded 4-bit, sign-extended value
 		return ret;
 	}
 
+//		// brr tools method i don't totally understand
+//		error = Clip(error) + (1 << (range + 2)) + ((1 << range) >> 2);
+//
+//		// default to the lowest value
+//		ret = -8;
+//
+//		// TODO is error ever negative? need to investigate
+//		if (error > 0) {
+//			ret = (error << 1) >> range;
+//
+//			// keep the value in range
+//			if (ret > 0xF) {
+//				ret = 0xF;
+//			}
+//
+//			// change the domain of ret from [0,15] to [-8,7]
+//			ret -= 8;
+//		}
+
+	// lifted directly from fullsnes.txt
 	/// <summary>
-	/// Creates a brute force algorithm with specific parameters based on the original BRRtools algorithm.
-	/// </summary>
-	/// <param name="silentStart">Enables the algorithm to encode a block of complete silence at the start.</param>
-	/// <param name="disableFilter0">Requests that the algorithm not perform block encoding with filter 0. This does not apply to the initial block.</param>
-	/// <param name="disableFilter1">Requests that the algorithm not perform block encoding with filter 1.</param>
-	/// <param name="disableFilter2">Requests that the algorithm not perform block encoding with filter 2.</param>
-	/// <param name="disableFilter3">Requests that the algorithm not perform block encoding with filter 3.</param>
-	/// <returns>An delegate function encoding the algorithm.</returns>
-	public static EncodingAlgorithm GetBRRtoolsBruteForce(bool silentStart, bool disableFilter0, bool disableFilter1, bool disableFilter2, bool disableFilter3) =>
-		(samples, loopBlock) => {
-			int samplesLength = samples.Length;
-			int blockCount = samplesLength / PcmBlockSize;
-
-			int blockPos = 0;
-			bool hasLoop = loopBlock >= 0;
-
-			bool force0 = true;
-
-			byte endFlags =  hasLoop ? (byte) (EndFlag|LoopFlag) : EndFlag;
-
-			int P1 = 0, P1Loop = 0;
-			int P2 = 0, P2Loop = 0;
-			int filterAtLoop = 0;
-
-			// add 16 silent samples at the start if necessary and requested
-			if (silentStart) {
-				for (int i = 0; i < 16; i++) {
-					if (samples[i] is not 0) {
-						force0 = false; // no more need to force block 0
-						loopBlock++;
-						blockCount++;
-						blockPos += BrrBlockSize;
-						// shouldn't need to tell the brr to initialize, since an array of bytes initializes to 0
-						break;
-					}
-				}
-
-			}
-
-			var brrOut = new BRRSample(blockCount) {
-				LoopBlock = loopBlock,
-			};
-
-			// value to test for n being
-			int loopTest = hasLoop switch {
-				true => loopBlock * 16,
-				false => NoLoop
-			};
-
-			int endTest = samplesLength - PcmBlockSize;
-
-			for (int n = 0; n < samplesLength; n += PcmBlockSize, blockPos += BrrBlockSize) {
-				// Encode BRR block, tell the encoder if we're at loop point (if loop is enabled), and if we're at end point
-				bool isLoopPoint = n == loopTest;
-				bool isEndPoint = n == endTest;
-
-				double bestError = double.PositiveInfinity;
-
-				PredictionFilter filterFunc;
-				int filter;
-				int bestFilter = 0;
-				int bestRange = 0;
-
-				bool write = false;
-
-				if (force0) {
-					MashAll(0);
-					force0 = false;
-				} else {
-					if (!disableFilter0) {
-						MashAll(0);
-					}
-
-					if (!disableFilter1) {
-						MashAll(1);
-					}
-
-					if (!disableFilter2) {
-						MashAll(2);
-					}
-
-					if (!disableFilter3) {
-						MashAll(3);
-					}
-				}
-
-				if (isLoopPoint) {
-					filterAtLoop = bestFilter;
-					P1Loop = P1;
-					P2Loop = P2;
-				}
-
-				write = true;
-				filter = bestFilter;
-				filterFunc = GetPredictionFilter(filter);
-
-				ADPCMMash(bestRange);
-
-				// Local functions
-				// gets ugly here
-				void MashAll(int filteri) {
-					filterFunc = GetPredictionFilter(filteri);
-					filter = filteri;
-
-					// fullsnes.txt says shift 0 is useless, so let's not use it
-					for (int sa = 1; sa < 13; sa++) {
-						ADPCMMash(sa);
-					}
-				}
-
-				void ADPCMMash(int range) {
-					double blockError = 0.0;
-
-					int l1 = P1;
-					int l2 = P2;
-					int step = (1 << (range + 2)) + ((1 << range) >> 2);
-					int sampleError, dp;
-
-					bool even = true;
-					int writeAt = blockPos + 1;
-
-					for (int i = 0; i < PcmBlockSize; i++) {
-						int da;
-						int thisSample = samples[n + i];
-						int linearValue = filterFunc(l1, l2) >> 1;
-
-						// difference between linear prediction and current sample
-						sampleError = (thisSample >> 1) - linearValue;
-
-						if (sampleError < 0) {
-							da = -sampleError;
-						} else {
-							da = sampleError;
-						}
-
-						if (da is > 16384 and < 32768) {
-							sampleError = (sampleError >> 9) & 0x07FF_8000;
-						}
-
-						dp = sampleError + step;
-
-						int c = 0;
-
-						if (dp > 0) {
-							// not allowing shift 0 for now
-							c = (dp << 1) >> range;
-
-							if (c > 0xF) {
-								c = 0xF;
-							}
-						}
-
-						c -= 8;
-
-						dp = (c << range) >> 1; // quantized estimate of samp
-
-						l2 = l1; // shift history
-
-						l1 = linearValue + dp;
-
-						if (l1 is < short.MinValue or > short.MaxValue) {
-							l1 = (short) (0x7FFF - (l1 >> 24));
-						}
-
-						l1 <<= 1;
-
-						sampleError = thisSample - l1;
-
-						blockError += (double) sampleError * sampleError;
-
-						if (write) {
-							if (even = !even) {
-								// odd samples
-								brrOut[writeAt++] |= (byte) (c & 0x0F);
-							} else {
-								// even samples
-								brrOut[writeAt] = (byte) (c << 4);
-							}
-						}
-					}
-
-					if (write) {
-						P1 = l1;
-						P2 = l2;
-
-						int header = (range << RangeShift) | (filter << FilterShift);
-
-						if (isEndPoint) {
-							header |= endFlags; // Set the last block flags if we're on the last block
-						}
-
-						brrOut[blockPos] = (byte) header;
-					} else {
-						if (isEndPoint) {
-							// Account for history points when looping is enabled & filters used
-							switch (filterAtLoop) {
-								case 0:
-									blockError /= 16.0;
-									break;
-
-								// Filter 1
-								case 1:
-									int temp1 = l1 - P1Loop;
-									blockError += (double) temp1 * temp1;
-									blockError /= 17.0;
-									break;
-
-								// Filters 2 & 3
-								default:
-									int temp2 = l1 - P1Loop;
-									blockError += (double) temp2 * temp2;
-									temp2 = l2 - P2Loop;
-									blockError += (double) temp2 * temp2;
-									blockError /= 18.0;
-									break;
-							}
-						} else {
-							blockError /= 16.0;
-						}
-
-						if (blockError < bestError) {
-							bestError = blockError;
-							bestFilter = filter;
-							bestRange = range;
-						}
-					}
-				}
-			}
-
-			return brrOut;
-		};
-
-	/// <inheritdoc cref="Decode(byte[], int, int, decimal, int, bool)"/>
-	public static WaveContainer Decode(BRRSample brrSample, int sampleRate = -1, decimal minimumLength = 0.0M,
-		int loopCount = 1, bool applyGaussian = false) {
-
-		return Decode(brrSample.Data,
-			loopBlock: brrSample.LoopBlock,
-			sampleRate: sampleRate < 1 ? brrSample.EncodingFrequency : sampleRate,
-			minimumLength: minimumLength,
-			loopCount: loopCount,
-			applyGaussian: applyGaussian
-		);
-	}
-
-	// TODO decoding is apparently done with 16.16 fixed point, so maybe try to emulate that instead of floats and see if there's a difference
-	/// <summary>
-	/// Decodes a given stream of BRR data into a Wave Sound audio file.
-	/// </summary>
-	/// <param name="brrSample">The BRR data to decode. This should not include any loop header.</param>
-	/// <param name="loopBlock">The loop point of this sample in blocks, or -1 if the sample does not loop.</param>
-	/// <param name="sampleRate">The output sample rate the audio file should be played back at.</param>
-	/// <param name="minimumLength">The minimum length of looped audio in seconds. Takes priority over <paramref name="loopCount"/>. Ignored on non-looping samples.</param>
-	/// <param name="loopCount">The number of times this file should be looped. Defers to <paramref name="minimumLength"/>. Ignored on non-looping samples.</param>
-	/// <param name="applyGaussian">Allows application of a filter to the final audio to simulate the SNES Gaussian filtering.</param>
-	/// <returns>A new <see cref="WaveContainer"/> object containing the decoded audio.</returns>
-	/// <exception cref="BRRConversionException"></exception>
-	public static WaveContainer Decode(byte[] brrSample, int loopBlock = NoLoop, int sampleRate = DefaultFrequency,
-		decimal minimumLength = 0.0M, int loopCount = 1, bool applyGaussian = false) {
-
-		const int GaussA = 372;
-		const int GaussB = 1304;
-		const int GaussShift = 11;
-
-		int blockCount = brrSample.Length / BrrBlockSize;
-
-		if ((brrSample.Length % BrrBlockSize) is not 0) {
-			throw new BRRConversionException($"Data size is not a multiple of {BrrBlockSize}: {brrSample.Length} | {blockCount * BrrBlockSize}");
-		}
-
-		if (loopBlock >= blockCount) {
-			loopBlock = NoLoop;
-		}
-
-		if (loopBlock < 0) {
-			loopCount = 0;
-			loopBlock = blockCount;
-		} else {
-			int minSamples = (int) decimal.Ceiling(minimumLength * sampleRate / PcmBlockSize);
-			loopCount = Math.Max(loopCount, (minSamples - loopBlock) / (blockCount - loopBlock));
-			loopCount = Math.Clamp(loopCount, 1, 777);
-		}
-
-		int outBlocks = loopCount * (blockCount - loopBlock) + loopBlock;
-		int sampleCount = outBlocks * PcmBlockSize;
-
-		var retWav = new WaveContainer(sampleRate, PreferredBitsPerSample, sampleCount);
-
-		int brrPos = 0;
-		int wavPos = 0;
-		int loopAt = loopBlock * BrrBlockSize;
-
-		int p1 = 0;
-		int p2 = 0;
-
-		for (int i = 0; i < loopBlock; i++) {
-			DecodeNextBlock();
-		}
-
-		for (; loopCount > 0; loopCount--) {
-			brrPos = loopAt;
-			for (int i = loopBlock; i < blockCount; i++) {
-				DecodeNextBlock();
-			}
-		}
-
-		if (applyGaussian) {
-			int prev = GaussA * ((GaussB * retWav[0]) + retWav[1]);
-			int ln = blockCount * PcmBlockSize - 1;
-			for (int i = 1; i < ln; i++) {
-				int temp = (GaussB * retWav[i]) + (GaussA * (retWav[i - 1] + retWav[i + 1]));
-				retWav[i - 1] = (short) (prev >> GaussShift);
-				prev = temp;
-			}
-			int last = GaussA * ((GaussB * retWav[^2]) + retWav[^1]);
-			retWav[^2] = (short) (prev >> GaussShift);
-			retWav[^1] = (short) (last >> GaussShift);
-		}
-
-		return retWav;
-
-		void DecodeNextBlock() {
-			var predictor = GetPredictionFilter((brrSample[brrPos] & FilterMask) >> FilterShift);
-
-			int shift = (brrSample[brrPos] & RangeMask) >> RangeShift;
-
-			brrPos++;
-
-			for (int i = 0; i < 8; i++) {
-				retWav[wavPos++] = (short) DecodeNextSample((byte) (brrSample[brrPos] >> 4));
-				retWav[wavPos++] = (short) DecodeNextSample((byte) (brrSample[brrPos] & 0x0F));
-
-				brrPos++;
-			}
-
-			int DecodeNextSample(byte samp) {
-				int a = (shift, samp) switch {
-					(< 13, < 8) => (samp << shift) >> 1,
-					(< 13, _  ) => ((samp - 16) << shift) >> 1,
-					(_   , < 8) => 2048,
-					(_   , _  ) => -2048,
-				};
-
-				a += predictor(p1, p2);
-
-				p2 = p1;
-
-				int ret = p1 = (a switch {
-					> short.MaxValue => short.MaxValue - 0x8000,
-					< short.MinValue => short.MinValue + 0x8000,
-					> 0x3FFF         => a - 0x8000,
-					< -0x4000        => a + 0x8000,
-					_                => a
-				});
-
-				return ret * 2;
-			}
-		}
-	}
-
-
-	/// <summary>
-	/// Returns a new array of integers with the Gaussian interpolation table values.
+	/// Returns a new array of integers with the SNES Gaussian interpolation table.
 	/// </summary>
 	public static int[] GetGaussTable() =>
-	[ // lifted directly from fullsnes.txt
+	[
 		0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
 		0x001, 0x001, 0x001, 0x001, 0x001, 0x001, 0x001, 0x001, 0x001, 0x001, 0x001, 0x002, 0x002, 0x002, 0x002, 0x002,
 		0x002, 0x002, 0x003, 0x003, 0x003, 0x003, 0x003, 0x004, 0x004, 0x004, 0x004, 0x004, 0x005, 0x005, 0x005, 0x005,
@@ -752,5 +427,4 @@ public static class Conversion {
 		0x502, 0x503, 0x504, 0x506, 0x507, 0x508, 0x50A, 0x50B, 0x50C, 0x50D, 0x50E, 0x50F, 0x510, 0x511, 0x511, 0x512,
 		0x513, 0x514, 0x514, 0x515, 0x516, 0x516, 0x517, 0x517, 0x517, 0x518, 0x518, 0x518, 0x518, 0x518, 0x519, 0x519
 	];
-
 }

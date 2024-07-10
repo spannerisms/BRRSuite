@@ -1,4 +1,6 @@
-﻿namespace BRRSuite;
+﻿// BRR Suite is licensed under the MIT license.
+
+namespace BRRSuite;
 
 /// <summary>
 /// Flags problems with BRR sample data.
@@ -10,64 +12,90 @@ public enum BRRDataIssue : int {
 	/// </summary>
 	None                      = 0,
 
+	// file size issues
+
 	/// <summary>
-	/// Indicates raw data was not a multiple of 9.
+	/// Raw data is not a multiple of 9.
 	/// </summary>
-	WrongAlignment            = 1 << 0,
+	BadAlignment              = 1 << 0,
 
 	/// <summary>
-	/// Indicates raw data was not a multiple of 9, and that there appears to be a loop header.
+	/// The data is not large enough to be a proper sample. This issue is never resolvable.
 	/// </summary>
-	WrongAlignmentForHeadered = 1 << 1,
+	DataTooSmall              = 1 << 1,
 
 	/// <summary>
-	/// Indicates that the data is not large enough to be a proper sample. This issue is never resolvable.
+	/// The data is far too large to reasonably be interpreted as a BRR sample.
 	/// </summary>
-	DataTooSmall              = 1 << 2,
+	DataTooLarge              = 1 << 2,
+
+	// header issues
 
 	/// <summary>
-	/// Indicates that the data is far too large to reasonably be interpreted as a BRR sample.
+	/// The final block's header does not contain the end of sample flag.
 	/// </summary>
-	DataTooLarge              = 1 << 3,
+	MissingEndFlag            = 1 << 3,
 
 	/// <summary>
-	/// Indicates that the final block's header does not contain the end of sample flag.
+	/// The end flag appears on one or more blocks before the final block.
 	/// </summary>
-	MissingEndFlag            = 1 << 4,
+	EarlyEndFlags             = 1 << 4,
 
 	/// <summary>
-	/// Indicates that the end flag appears on any header other than the final block.
+	/// A loop point is defined, but the final block's header does not contain the loop flag.
 	/// </summary>
-	EarlyEndFlags             = 1 << 5,
+	MissingLoopFlag           = 1 << 5,
+
+	// loop point issues
 
 	/// <summary>
-	/// Indicates that the final block's header does not contain the end of sample flag.
+	/// No loop point was specified, but the final block's header contains a loop flag. This issue is not easily resolvable if the sample should loop.
 	/// </summary>
-	MissingLoopFlag           = 1 << 6,
+	MissingLoopPoint          = 1 << 6,
 
 	/// <summary>
-	/// Indicates that no loop point was specified for the data. This issue is never resolvable.
+	/// The specified loop point is not aligned to a BRR block. This issue is not easily resolvable for self-looping samples.
 	/// </summary>
-	MissingLoopPoint          = 1 << 7,
+	MisalignedLoopPoint       = 1 << 7,
 
 	/// <summary>
-	/// Indicates that the specified loop point is not aligned to a BRR block. This issue is never resolvable for a looped sample but is technically okay for an unlooped sample.
+	/// The specified loop point is past the end of the data. This issue is not easily resolvable for self-looping samples.
 	/// </summary>
-	MisalignedLoopPoint       = 1 << 8,
+	OutOfRangeLoopPoint       = 1 << 8,
+
+	// more header issues
 
 	/// <summary>
-	/// Indicates that the specified loop point is past the end of the data. This issue is never resolvable for a looped sample but is technically okay for an unlooped sample.
+	/// One or more blocks contain a range of 13 or higher.
 	/// </summary>
-	OutOfRangeLoopPoint       = 1 << 9,
-
+	LargeRange                = 1 << 16,
 
 	/// <summary>
-	/// Indicates that a <see cref="BRRSample"/> has a mismatch between its internal block count and the actual size of its data. This issue is never resolvable.
+	/// Block 0 is not using filter 0, which may cause unwanted decoding issues.
+	/// </summary>
+	Block0Filter              = 1 << 17,
+
+	/// <summary>
+	/// Block 0 begins with nonzero samples, which may cause errors in the Gaussian interpolation.
+	/// </summary>
+	Block0Samples             = 1 << 18,
+
+	// container issues
+
+	/// <summary>
+	/// A <see cref="BRRSample"/> has a mismatch between its internal block count and the actual size of its data. This issue is never resolvable.
 	/// </summary>
 	WrongBlockCount           = 1 << 24,
 
+	// meta issues
+
 	/// <summary>
-	/// Indicates issues were found with the data that cannot be fixed without more information.
+	/// The data has an issue that results in undefined, unusual, or potentially unwanted behavior.
+	/// </summary>
+	UndefinedBehavior         = 1 << 30,
+
+	/// <summary>
+	/// Issues were found which cannot be fixed without more information.
 	/// </summary>
 	Unresolvable              = 1 << 31,
 }

@@ -1,37 +1,20 @@
-﻿namespace BRRSuite;
+﻿// BRR Suite is licensed under the MIT license.
 
-/// <summary>
-/// <para>
-///     Encapsulates a method containing an algorithm to resample a specified portion of a given set of samples to a new size.
-/// </para>
-///
-/// <para>
-///     When creating an algorithm, it is expected that the input data not be modified,
-///     thus it is required that a non-writable span be passed as the accessor to the data.
-/// </para>
-/// 
-/// <para>
-///     Preferably, new algorithms should implement error checking by calling
-///     <see cref="ResamplingAlgorithms.ThrowIfInvalid(int, int, int)"/>
-///     and include a fast copy method for when <paramref name="inLength"/> and <paramref name="outLength"/> are equal.
-/// </para>
-/// </summary>
-/// <param name="samples">The data to be resampled.</param>
-/// <param name="inLength">The length of data to use for resampling.</param>
-/// <param name="outLength">The new length to resample to.</param>
-/// <returns>A new array of integers containing the resampled data.</returns>
-public delegate int[] ResamplingAlgorithm(ReadOnlySpan<int> samples, int inLength, int outLength);
+namespace BRRSuite;
 
 /// <summary>
 /// Contains methods for creating <see cref="ResamplingAlgorithm"/> delegates.
 /// </summary>
 public static class ResamplingAlgorithms {
 	/// <summary>
-	/// Throws an <see cref="ArgumentException"/> if any of the following occurs:<br/>
-	/// • <paramref name="inLength"/> &gt; <paramref name="samplesLength"/><br/>
-	/// • <paramref name="inLength"/> &lt; 1<br/>
-	/// • <paramref name="outLength"/> &lt; 1
+	/// Tests the parameters of a resampling invocation, throwing an error if they are not valid.
 	/// </summary>
+	/// <remarks>
+	/// Throws an <see cref="ArgumentException"/> if any of the following is true:<br/>
+	/// - <paramref name="inLength"/> &gt; <paramref name="samplesLength"/><br/>
+	/// - <paramref name="inLength"/> &lt; 1<br/>
+	/// - <paramref name="outLength"/> &lt; 1
+	/// </remarks>
 	/// <param name="samplesLength">The length of the input data.</param>
 	/// <param name="inLength"><inheritdoc cref="ResamplingAlgorithm" path="/param[@name='inLength']"/></param>
 	/// <param name="outLength"><inheritdoc cref="ResamplingAlgorithm" path="/param[@name='outLength']"/></param>
@@ -52,6 +35,7 @@ public static class ResamplingAlgorithms {
 		}
 	}
 
+	// ported from BRRtools
 	/// <summary>
 	/// A resampling algorithm that uses nearest-neighbor interpolation.
 	/// </summary>
@@ -61,7 +45,7 @@ public static class ResamplingAlgorithms {
 
 			// Fast copy
 			if (inLength == outLength) {
-				return samples[..inLength].ToArray();
+				return samples[..inLength];
 			}
 
 			double ratio = ((double) inLength) / outLength;
@@ -75,70 +59,7 @@ public static class ResamplingAlgorithms {
 			return outBuf;
 		};
 
-	/// <summary>
-	/// A resampling algorithm that uses linear interpolation.
-	/// </summary>
-	public static readonly ResamplingAlgorithm LinearInterpolation =
-		(samples, inLength, outLength) => {
-			ThrowIfInvalid(samples.Length, inLength, outLength);
-
-			// Fast copy
-			if (inLength == outLength) {
-				return samples[..inLength].ToArray();
-			}
-
-			double ratio = ((double) inLength) / outLength;
-			int[] outBuf = new int[outLength];
-
-			int lastSample = inLength - 1;
-
-			for (int i = 0; i < outLength; i++) {
-				int a = (int) (i * ratio); // Whole part of index
-
-				if (a == lastSample) {
-					outBuf[i] = samples[a];
-				} else {
-					double b = i * ratio - a; // Fractional part of index
-					outBuf[i] = (int) ((1 - b) * samples[a] + b * samples[a + 1]);
-				}
-			}
-
-			return outBuf;
-		};
-
-	/// <summary>
-	/// A resampling algorithm that uses sinusoidal interpolation.
-	/// </summary>
-	public static readonly ResamplingAlgorithm SineInterpolation =
-		(samples, inLength, outLength) => {
-			ThrowIfInvalid(samples.Length, inLength, outLength);
-
-			// Fast copy
-			if (inLength == outLength) {
-				return samples[..inLength].ToArray();
-			}
-
-			double ratio = ((double) inLength) / outLength;
-			int[] outBuf = new int[outLength];
-
-			int lastSample = inLength - 1;
-
-			for (int i = 0; i < outLength; i++) {
-				int a = (int) (i * ratio);
-
-				if (a == lastSample) {
-					outBuf[i] = samples[a];
-				} else {
-					double b = i * ratio - a;
-					double c = (1.0 - Math.Cos(b * Math.PI)) / 2.0;
-
-					outBuf[i] = (int) ((1 - c) * samples[a] + c * samples[a + 1]);
-				}
-			}
-
-			return outBuf;
-		};
-
+	// ported from BRRtools
 	/// <summary>
 	/// A resampling algorithm that uses cubic interpolation.
 	/// </summary>
@@ -148,7 +69,7 @@ public static class ResamplingAlgorithms {
 
 			// Fast copy
 			if (inLength == outLength) {
-				return samples[..inLength].ToArray();
+				return samples[..inLength];
 			}
 
 			double ratio = ((double) inLength) / outLength;
@@ -175,8 +96,9 @@ public static class ResamplingAlgorithms {
 			return outBuf;
 		};
 
+	// ported from BRRtools
 	/// <summary>
-	/// A resampling algorithm that uses band-limited interpolation.
+	/// A resampling algorithm that uses bandlimited interpolation.
 	/// </summary>
 	public static readonly ResamplingAlgorithm BandlimitedInterpolation =
 		(samples, inLength, outLength) => {
@@ -184,7 +106,7 @@ public static class ResamplingAlgorithms {
 
 			// Fast copy
 			if (inLength == outLength) {
-				return samples[..inLength].ToArray();
+				return samples[..inLength];
 			}
 
 			double ratio = ((double) inLength) / outLength;
@@ -239,7 +161,6 @@ public static class ResamplingAlgorithms {
 
 			return outBuf;
 		};
-
 
 	/// <summary>
 	/// Performs the normalized sinc function on a value.
