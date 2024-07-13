@@ -436,31 +436,34 @@ public sealed class BRRSample {
 			throw new ArgumentOutOfRangeException(nameof(minimumLength), $"{nameof(minimumLength)} must be a value between 0 and 10.");
 		}
 
-		// get sample rate from vxp
-		int sampleRate = pitch * DSPFrequency;
-		sampleRate /= DefaultVxPitch;
-
 		// determine length of output based on loop parameters
-		int loopBlock = _loopblock;
+		int loopPoint;
+		decimal minSamples ;
 
-		int loopCount = 0;
-
-		if (loopBlock >= _blockCount || loopBlock < 0) {
-			loopCount = 0;
-			loopBlock = 0;
-		} else {
-			int minSamples = (int) decimal.Ceiling(minimumLength * sampleRate / PCMBlockSize);
-			loopCount = Math.Max(loopCount, (minSamples - loopBlock) / (_blockCount - loopBlock));
-			loopCount = Math.Clamp(loopCount, 1, 777);
-		}
-
-		int loopPoint = loopBlock * PCMBlockSize;
 		int brrSampleSize = SampleCount;
 
-		int loopSize = _blockCount - loopBlock;
+		if (_loopblock >= _blockCount || _loopblock < 0) {
+			minSamples = _blockCount * PCMBlockSize;
+			loopPoint = 0;
+		} else {
+			loopPoint = _loopblock * PCMBlockSize;
+			int loopSamples = SampleCount - loopPoint;
 
-		int blockCount = _blockCount + (loopSize * loopCount);
-		int sampleCount = blockCount * PCMBlockSize;
+			// number of samples required
+			minSamples = minimumLength * DSPFrequency;
+
+			// get rid of the non loop samples
+			minSamples -= loopPoint;
+
+			// get the number of loops this can hold
+			minSamples = decimal.Ceiling(minSamples / loopSamples);
+			minSamples *= loopSamples;
+
+			// add the non loop samples back
+			minSamples += loopPoint;
+		}
+
+		int sampleCount = (int) decimal.Ceiling(minSamples / ((decimal) pitch / DefaultVxPitch));
 
 		WaveContainer ret = new(DSPFrequency, PreferredBitDepth, sampleCount);
 
@@ -470,51 +473,51 @@ public sealed class BRRSample {
 		// "random" numbers; just something nonzero to emulate badness if not initialized to filter 0
 		int p1 = unchecked((short) 0xBEBE);
 		int p2 = 5656; // Awww man... now that's all I can think about!
-		int p3 = 0x4040;
-		int p4 = -0x7171;
-	
+		int p3 = 0;
+		int p4 = 0;
+
 		for (int i = 0; i < 4; i++) {
 			DecodeNextSample();
 		}
-	
+		
 		for (int i = 0; i < sampleCount; i++) {
 			// next sample output
 			int gaussX = (pitchCounter >> 4) & 0xFF;
 			int wv;
-			wv  = (SuiteUtility.SuiteGaussTable[0x0FF - gaussX] * p4) >> 10;
-			wv += (SuiteUtility.SuiteGaussTable[0x1FF - gaussX] * p3) >> 10;
-			wv += (SuiteUtility.SuiteGaussTable[0x100 + gaussX] * p2) >> 10;
-			wv += (SuiteUtility.SuiteGaussTable[0x000 + gaussX] * p1) >> 10;
-			wv >>= 1;
-			wv = Conversion.Clip(wv);
+			wv  = (SuiteUtility.SuiteGaussTable[0x0FF - gaussX] * (p4 << 1)) >> 11;
+			wv += (SuiteUtility.SuiteGaussTable[0x1FF - gaussX] * (p3 << 1)) >> 11;
+			wv += (SuiteUtility.SuiteGaussTable[0x100 + gaussX] * (p2 << 1)) >> 11;
+			wv = (short) wv;
+			wv += (SuiteUtility.SuiteGaussTable[0x000 + gaussX] * (p1 << 1)) >> 11;
+			//wv = Conversion.Clip(wv);
 			ret[i] = (short) wv;
-	
+		
 			pitchCounter += pitch;
-	
+		
 			while (pitchCounter >= 0x1000) {
 				DecodeNextSample();
 				pitchCounter -= 0x1000;
 			}
 		}
-	
+		
 		void DecodeNextSample() {
 			BRRBlock brb = new(ref _data[(decodePos >> 4) * BRRBlockSize]);
-	
+		
 			int p5 = Conversion.ApplyRange(brb[decodePos & 0xF], brb.Range);
 			p5 += Conversion.GetPrediction(brb.Filter, p1, p2);
-	
+		
 			p4 = p3;
 			p3 = p2;
 			p2 = p1;
-			p1 = p5;
-	
+			p1 = (short) p5;
+		
 			decodePos++;
-	
+		
 			if (decodePos == brrSampleSize) {
 				decodePos = loopPoint;
 			}
 		}
-	
+
 		return ret;
 	}
 

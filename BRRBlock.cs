@@ -62,7 +62,7 @@ public readonly ref struct BRRBlock {
 	///     For big-endian machines, no correction is needed.
 	/// </para>
 	/// </remarks>
-	private static readonly int IndexCorrectionRead = BitConverter.IsLittleEndian ? 0b1111 : 0b0000;
+	private static readonly int IndexCorrectionRead = BitConverter.IsLittleEndian ? 0b1110 : 0b0000;
 
 	/// <summary>
 	/// Provides signed 4-bit access to any of the 16 samples encoded in this block.
