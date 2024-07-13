@@ -2,7 +2,7 @@
 ```csharp
 public readonly ref struct PCMBlock
 ```
-The `PCMBlock` type provides fast, efficient, type- and memory-safe access to a single 16-sample block within a PCM sample. As a ref struct, it is subject to [a number limitations](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/ref-struct).
+The `PCMBlock` type provides fast, efficient, type- and memory-safe access to a single 16-sample block within a PCM sample. As a ref struct, it is subject to [a number of limitations](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/ref-struct).
 
 ----
 

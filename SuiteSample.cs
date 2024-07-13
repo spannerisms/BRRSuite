@@ -128,8 +128,8 @@ public sealed class SuiteSample {
 			_loopPoint = value;
 		}
 	}
-
 	private int _loopPoint;
+
 	/// <summary>
 	/// Gets the number of blocks in this sample.
 	/// </summary>
@@ -222,6 +222,73 @@ public sealed class SuiteSample {
 	/// <returns>The N-SPC instrument pitch multiplier.</returns>
 	public int GetNSPCMultiplier() {
 		return (ushort) (DefaultVxPitch * 0x100 / VxPitch);
+	}
+
+	private const int DefaultVxPitchOctave = 4;
+	private const double ConcertC4 = 261.6256D;
+
+	/// <inheritdoc cref="SetVxPitchForFrequency(double, int)"/>
+	/// <inheritdoc cref="GetVxPitchForFrequency(double)" path="/remarks"/>
+	public void SetVxPitchForFrequency(double frequency) => SetVxPitchForFrequency(frequency, DefaultVxPitchOctave);
+
+	/// <summary>
+	/// Sets the VxPitch of this sample to the value that most closely tunes it nearest the specified octave.
+	/// </summary>
+	/// <inheritdoc cref="GetVxPitchForFrequency(double, int)" path="/param"/>
+	public void SetVxPitchForFrequency(double frequency, int octave) {
+		VxPitch = GetVxPitchForFrequency(frequency, octave);
+	}
+
+	/// <inheritdoc cref="GetVxPitchForFrequency(double, int)" path="//summary|//param|//returns"/>
+	/// <remarks>
+	/// Uses a default octave of 4, corresponding to a VxPitch of 0x1000.
+	/// </remarks>
+	public static int GetVxPitchForFrequency(double frequency) => GetVxPitchForFrequency(frequency, DefaultVxPitchOctave);
+
+	/// <summary>
+	/// Gets the VxPitch that most closely tunes this sample nearest the specified octave.
+	/// </summary>
+	/// <param name="frequency">The frequency of the sample.</param>
+	/// <param name="octave">
+	///     The octave of C that should be tuned to.
+	///     This should be a value in the range [0,5],
+	///     where the VxPITCH target is calculated as <c>0x1000*2^(octave-4)</c>.
+	/// </param>
+	/// <returns>The corresponding VxPITCH value of the given frequency tuned to the specified octave.</returns>
+	/// <exception cref="ArgumentOutOfRangeException"></exception>
+	public static int GetVxPitchForFrequency(double frequency, int octave) {
+		if (frequency < 1) {
+			throw new ArgumentOutOfRangeException(nameof(frequency), "Frequency cannot be less than 1.");
+		}
+
+		int targetVx = octave switch {
+			0 => DefaultVxPitch/16,
+			1 => DefaultVxPitch/8,
+			2 => DefaultVxPitch/4,
+			3 => DefaultVxPitch/2,
+			4 => DefaultVxPitch,
+			5 => DefaultVxPitch*2,
+			_ => throw new ArgumentOutOfRangeException(nameof(octave), "Octave must be a value from 0 to 5, inclusive.")
+		};
+
+		// get ratio between the given frequency and C4
+		decimal retvxp = DefaultVxPitch * (decimal) (ConcertC4 / frequency);
+
+		if (retvxp < targetVx) {
+			decimal bounds = targetVx / 2;
+
+			while (retvxp <= bounds) {
+				retvxp *= 2;
+			}
+		} else {
+			decimal bounds = targetVx * 2;
+
+			while (retvxp >= bounds) {
+				retvxp /= 2;
+			}
+		}
+
+		return (int) decimal.Round(retvxp, 0, MidpointRounding.ToZero);
 	}
 
 	/// <summary>
