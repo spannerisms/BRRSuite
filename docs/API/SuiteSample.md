@@ -24,10 +24,10 @@ This class provides an implementation of the [BRR Suite Sample specification](./
 | -------- |:------:|:----:| ----------- |
 | <samp>Sample</samp> | <kbd>get</kbd> | <kbd>BRRSample</kbd> | The underlying sample.
 | <samp>InstrumentName</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>string</kbd> | A 24-character ISO Latin 1 string describing the sample. The property setter will enforce the character set and length when assigned to.
-| <samp>VxPitch</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>ushort</kbd> | [See below](#vxpitch); Defaults to `0x1000`. 
+| <samp>VxPitch</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>int</kbd> | [See below](#vxpitch); Defaults to `0x1000`. 
 | <samp>EncodingFrequency</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>int</kbd> | The target frequency in hertz this sample was resampled to before being encoded. Defaults to 32000. 
 | <samp>LoopBehavior</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>LoopBehavior</kbd> | Specifies the loop behavior of the sample.
-| <samp>LoopPoint</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>ushort</kbd> | Specifies the location of the loop point.
+| <samp>LoopPoint</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>int</kbd> | Specifies the location of the loop point.
 | <samp>BlockCount</samp> | <kbd>get</kbd> | <kbd>int</kbd> | The number of blocks in this sample.
 | <samp>SampleLength</samp> | <kbd>get</kbd> | <kbd>int</kbd> | The length of the sample data in bytes.
 
@@ -52,7 +52,7 @@ By default, a `SuiteSample` will copy the loop point of its underlying sample. S
 | ------ |:-------:| ----------- |
 | <samp>SetLoopPoint(int)</samp> | <kbd>void</kbd> | Sets the loop point with automatic correction of the loop type.
 | <samp>ResetLoopPoint()</samp> | <kbd>void</kbd> | Resets the loop point to that of the underlying sample.
-| <samp>GetNSPCMultiplier()</samp> | <kbd>ushort</kbd> | Gets a multiplier for N-SPC instrument definitions. Most implementations of N-SPC store this number in big-endian.
+| <samp>GetNSPCMultiplier()</samp> | <kbd>int</kbd> | Gets a multiplier for N-SPC instrument definitions. Most implementations of N-SPC store this number in big-endian.
 | <samp>Save(string, bool)</samp> | <kbd>void</kbd> | Save this instance to the given file path. See [File formats](../fileformats.md).
 
 ----
@@ -70,4 +70,4 @@ By default, a `SuiteSample` will copy the loop point of its underlying sample. S
 | <samp>SetAndFlagLoopPoint(int)</samp> | <kbd>void</kbd> | Sets the loop point with automatic correction of the loop behavior property.
 | <samp>ValidateSuiteSample(byte[], out string)</samp> | <kbd>bool</kbd> | Tests the given array of data for BRR Suite Sample file validity.
 | <samp>ValidateSuiteSample(Stream, out string)</samp> | <kbd>bool</kbd> | Tests the given stream of data for BRR Suite Sample file validity.
-| <samp>GetChecksum(Span&lt;byte&gt;)</samp> | <kbd>ushort</kbd> | Creates a checksum for the given data.
+| <samp>GetChecksum(Span&lt;byte&gt;)</samp> | <kbd>int</kbd> | Creates a checksum for the given data.

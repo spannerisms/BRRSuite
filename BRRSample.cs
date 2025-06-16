@@ -438,7 +438,7 @@ public sealed class BRRSample {
 
 		// determine length of output based on loop parameters
 		int loopPoint;
-		decimal minSamples ;
+		decimal minSamples;
 
 		int brrSampleSize = SampleCount;
 

@@ -49,7 +49,7 @@ public static void SampleExample(BRRSample brr, int block) {
 
 	// the original data is changed by the BRRBlock
 	// b now holds 0x4F from samples 8 and 9
-	byte b = brr[block * 9 + 5];
+	int b = brr[block * 9 + 5];
 }
 ```
 

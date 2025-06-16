@@ -39,7 +39,7 @@ The range of a block defines how much each sample should be shifted when it is d
 The filter of a block defines which prediction filter should be used for encoding samples.
 
 #### Loop
-The loop flag defines the behavior of the end block. If this flag is set, the sample will return to its loop point once an end flag is reached. Without an end flag, the loop flag does nothing.
+The loop flag defines the behavior of the end block. If this flag is set, the sample will return to its loop point if the end flag is also set. Without an end flag, the loop flag does nothing.
 
 #### End
 The end flags marks the end of a sample. Once read, the sample will either stop or loop.

@@ -9,8 +9,8 @@ This document contains tips for writing code employing this library.
 The BRR Suite library includes a number of static utility classes:
 
 - `Conversion` contains constants and methods for encoding, decoding, and manipulating BRR data.
-- `ResamplingAlgorithm` contains algorithms methods and utility for writing new algorithms.
-- `PreEsncodingFilters` contains predefined filters and utility for writing new filters.
+- `ResamplingAlgorithms` contains algorithms methods and utility for writing new algorithms.
+- `PreEncodingFilters` contains predefined filters and utility for writing new filters.
 - `SuiteSampleConstants` contains constants for implementing the [BRR Suite Sample specification](./fileformats.md/#brr-suite-sample).
 
 ----

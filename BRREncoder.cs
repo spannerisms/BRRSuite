@@ -23,7 +23,14 @@ public abstract class BRREncoder {
 	/// Desired resampling factor.
 	/// </summary>
 	/// <remarks>
-	/// This value should not be 0 or negative.
+	/// <para>
+	///     This value should not be 0 or negative.
+	/// </para>
+	/// <para>
+	///     A value of 1.0 corresponds to no resampling.
+	///     Values greater than 1.0 correspond to resampling to lower frequencies,
+	///     and values less than 1.0 correspond to resampling to higher frequencies.
+	/// </para>
 	/// </remarks>
 	public decimal ResampleFactor {
 		get => _resampleFactor;
@@ -165,10 +172,11 @@ public abstract class BRREncoder {
 	/// <returns>A tuple containing the new length and the position of the loop relative the end of the sample.</returns>
 	protected virtual (int newLength, int loopSize) GetResamplingSizes(int inLength, decimal resampleFactor, int loopPoint) {
 		int targetLength;
-		int loopSize = 0;
+		int loopSize;
 
 		if (loopPoint < 0) {
 			targetLength = (int) decimal.Round(inLength / resampleFactor);
+			loopSize = -1;
 		} else {
 			decimal oldLoopSize = (inLength - loopPoint) / resampleFactor;
 

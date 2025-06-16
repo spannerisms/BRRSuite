@@ -14,7 +14,7 @@ These properties are present by default on every encoder.
 | -------- |:------:|:----:| ----------- |
 | <samp>Resampler</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>ResamplingAlgorithm</kbd> | A [ResamplingAlgorithm](./ResamplingAlgorithm.md) delegate encapsulating the algorithm that should be used for resampling PCM input.
 | <samp>Filters</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>PreEncodingFilter</kbd> | A [PreEncodingFilter](./PreEncodingFilter.md) encapsulating filters to apply to a waveform before encoding.
-| <samp>ResampleFactor</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>decimal</kbd> | The ratio between the sample rate of the audio files and the sample rate at which they should be encoded.
+| <samp>ResampleFactor</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>decimal</kbd> | The ratio between the sample rate of the audio files and the sample rate at which they should be encoded. A value of 1 means no resampling. Higher values indicate resampling to a lower frequency.
 | <samp>Truncate</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>int</kbd> | The point at which input PCM samples will be truncated; if 0 or negative, the input is not truncated.
 | <samp>LeadingZeros</samp> | <kbd>get</kbd><br/><kbd>set</kbd> | <kbd>int</kbd> | The number of leading zeros to enforce. See [&sect;&nbsp;Leading zeros](#leading-zeros) below.
 

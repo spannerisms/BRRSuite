@@ -72,7 +72,7 @@ The [SuiteSample](SuiteSample.md) class includes support for defining such loop 
 ## Static methods
 | Method | Returns | Description |
 | ------ |:-------:| ----------- |
-| <samp>ValidateBRRData(byte[])</samp> | <kbd>BRRDataIssue</kbd> | Validates raw data for BRR validity.
-| <samp>ValidateBRRData(Span&lt;byte&gt;)</samp> | <kbd>BRRDataIssue</kbd> | Validates raw data for BRR validity.
-| <samp>ValidateBRRData(byte[], int)</samp> | <kbd>BRRDataIssue</kbd> | Validates raw data with a known loop point for BRR validity.
-| <samp>ValidateBRRData(Span&lt;byte&gt;, int)</samp> | <kbd>BRRDataIssue</kbd> | Validates raw data with a known loop point for BRR validity.
+| <samp>ValidateBRRData(byte[])</samp> | <kbd>BRRDataIssue</kbd> | Tests raw data for BRR validity.
+| <samp>ValidateBRRData(Span&lt;byte&gt;)</samp> | <kbd>BRRDataIssue</kbd> | Tests raw data for BRR validity.
+| <samp>ValidateBRRData(byte[], int)</samp> | <kbd>BRRDataIssue</kbd> | Tests raw data with a known loop point for BRR validity.
+| <samp>ValidateBRRData(Span&lt;byte&gt;, int)</samp> | <kbd>BRRDataIssue</kbd> | Tests raw data with a known loop point for BRR validity.
